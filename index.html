@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Tus Finanzas – Santiago Tolaba</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="login-screen" style="position:fixed;inset:0;background:var(--dark);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;padding:32px;">
+  <div style="text-align:center;margin-bottom:40px;">
+    <div style="width:72px;height:72px;background:var(--accent);border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px;">💼</div>
+    <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:white;letter-spacing:-1px;">Tus Finanzas</div>
+    <div style="font-size:16px;color:#c8f064;margin-top:8px;font-weight:600;">¡Hola de nuevo! 👋</div>
+  </div>
+  <div style="width:100%;max-width:320px;">
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;display:block;margin-bottom:6px;">Email</label>
+      <input type="email" id="login-email" placeholder="tu@email.com"
+        style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:13px 16px;font-size:15px;color:white;font-family:'Inter',sans-serif;outline:none;"
+        onkeydown="if(event.key==='Enter') loginSubmit()">
+    </div>
+    <div style="margin-bottom:6px;">
+      <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;display:block;margin-bottom:6px;">Contraseña</label>
+      <input type="password" id="login-password" placeholder="••••••••"
+        style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:13px 16px;font-size:15px;color:white;font-family:'Inter',sans-serif;outline:none;"
+        onkeydown="if(event.key==='Enter') loginSubmit()">
+    </div>
+    <div id="login-error" style="text-align:center;color:#f87171;font-size:13px;margin-bottom:14px;min-height:20px;"></div>
+    <button onclick="loginSubmit()" id="btn-login"
+      style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">
+      Ingresar
+    </button>
+  </div>
+</div>
+
+<div class="app-header">
+  <div class="header-brand" style="justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="brand-icon">💼</div>
+      <div>
+        <div class="brand-name">Tus Finanzas</div>
+        <div class="brand-sub" id="header-user-email">Gestión financiera</div>
+      </div>
+    </div>
+    <div style="position:relative;">
+      <button id="btn-settings" onclick="toggleSettings()" style="background:rgba(255,255,255,0.1);border:none;border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;transition:background 0.2s;">⚙️</button>
+      <div id="settings-menu" style="display:none;position:absolute;right:0;top:42px;background:#1f2937;border-radius:10px;border:1px solid #374151;min-width:190px;z-index:100;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+        <button id="btn-cambiar-password" onclick="abrirCambiarPassword()" style="width:100%;padding:13px 16px;background:transparent;border:none;color:white;font-size:13px;font-weight:500;text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;font-family:'Inter',sans-serif;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.background='transparent'">
+          🔑 Cambiar contraseña
+        </button>
+        <div id="separador-settings" style="height:1px;background:#374151;"></div>
+        <button onclick="cerrarSesion()" style="width:100%;padding:13px 16px;background:transparent;border:none;color:#f87171;font-size:13px;font-weight:500;text-align:left;cursor:pointer;display:flex;align-items:center;gap:10px;font-family:'Inter',sans-serif;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.background='transparent'">
+          🚪 Cerrar sesión
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-password" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:#1a1a24;border-radius:18px;padding:28px 24px;width:100%;max-width:340px;">
+    <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:white;margin-bottom:6px;">🔑 Cambiar contraseña</div>
+    <div style="font-size:12px;color:#9ca3af;margin-bottom:20px;">Ingresá tu nueva contraseña.</div>
+    <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#6b7280;display:block;margin-bottom:5px;">Nueva contraseña</label>
+    <input type="password" id="new-password" placeholder="••••••••" style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:11px 14px;font-size:16px;color:white;font-family:'Inter',sans-serif;outline:none;margin-bottom:14px;">
+    <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#6b7280;display:block;margin-bottom:5px;">Confirmar nueva contraseña</label>
+    <input type="password" id="confirm-password" placeholder="••••••••" style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:11px 14px;font-size:16px;color:white;font-family:'Inter',sans-serif;outline:none;margin-bottom:6px;">
+    <div id="password-modal-error" style="font-size:12px;color:#f87171;min-height:18px;margin-bottom:14px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="cerrarModalPassword()" style="flex:1;padding:12px;background:#374151;color:#9ca3af;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancelar</button>
+      <button onclick="guardarNuevaPassword()" style="flex:1;padding:12px;background:#2563eb;color:white;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen active" id="screen-movimientos">
+
+  <div id="alerta-monotributo" style="display:none;border-radius:12px;padding:14px 16px;margin-bottom:14px;gap:12px;align-items:flex-start;">
+    <div style="font-size:24px;flex-shrink:0;" id="alerta-icon">📅</div>
+    <div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px;" id="alerta-titulo">Vencimiento Monotributo</div>
+      <div style="font-size:12px;line-height:1.5;" id="alerta-msg"></div>
+    </div>
+  </div>
+<div class="card" id="card-monotributo">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <div class="card-title" style="margin-bottom:0;">📊 Control Monotributo</div>
+    <select id="mono-categoria" class="form-select" style="width:auto;padding:6px 10px;font-size:12px;font-weight:600;" onchange="actualizarBarraMonotributo()">
+      <option value="A">Cat A</option>
+      <option value="B">Cat B</option>
+      <option value="C">Cat C</option>
+      <option value="D">Cat D</option>
+      <option value="E">Cat E</option>
+      <option value="F">Cat F</option>
+      <option value="G">Cat G</option>
+      <option value="H">Cat H</option>
+      <option value="I">Cat I</option>
+      <option value="J">Cat J</option>
+      <option value="K">Cat K</option>
+    </select>
+  </div>
+  
+  <div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-align:center;">
+    Facturado últimos 12 meses
+  </div>
+
+  <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--dark);margin-bottom:6px;">
+    <span id="mono-facturado">$0</span>
+    <span id="mono-limite" style="color:var(--muted);">$10.277.988</span>
+  </div>
+
+  <div style="width:100%;height:10px;background:var(--surface2);border-radius:5px;overflow:hidden;">
+    <div id="mono-barra" style="height:100%;width:0%;background:var(--green);transition:width 0.4s ease, background-color 0.4s ease;"></div>
+  </div>
+  
+  <div id="mono-porcentaje" style="font-size:11px;text-align:right;margin-top:6px;font-weight:700;color:var(--muted);">0%</div>
+</div>
+  
+    <div style="background:#e0f2fe;border:1.5px solid #bae6fd;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;">
+  <div style="font-size:24px;flex-shrink:0;">🏷️</div>
+  <div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#0369a1;margin-bottom:3px;">Límite por producto</div>
+    <div style="font-size:12px;color:#0c4a6e;line-height:1.4;font-weight:500;">Precio unitario máximo para venta de cosas muebles: <b>$613.492,31</b></div>
+  </div>
+</div>
+<div class="card">
+    <div class="card-title">➕ Nuevo movimiento</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Fecha</label>
+        <input type="date" class="form-input" id="mov-fecha">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <div class="select-wrapper">
+          <select class="form-select" id="mov-tipo" onchange="onTipoChange()">
+            <option value="ingreso">Ingreso</option>
+            <option value="egreso">Egreso</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Monto ($)</label>
+        <input type="number" class="form-input" id="mov-monto" placeholder="0.00" min="0" step="0.01">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+  <label class="form-label">Categoría</label>
+  <div class="select-wrapper">
+    <select class="form-select" id="mov-categoria"></select>
+  </div>
+</div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+  <label class="form-label">Medio de pago</label>
+  <div class="select-wrapper">
+    <select class="form-select" id="mov-medio"></select>
+  </div>
+</div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label class="form-label">Detalle (opcional)</label>
+      <input type="text" class="form-input" id="mov-detalle" placeholder="Descripción breve...">
+    </div>
+
+    <button class="btn-primary" onclick="agregarMovimiento()">Guardar movimiento</button>
+  </div>
+
+  <input type="file" accept=".xlsx,.xls" id="input-importar" style="display:none;" onchange="importarExcel(event)">
+  <div id="lista-reciente" style="display:none;"></div>
+
+</div>
+
+<div class="screen" id="screen-resumen">
+
+  <div class="summary-grid">
+    <div class="summary-card ing">
+      <div class="summary-card-label">Total Ingresos</div>
+      <div class="summary-card-value" id="res-total-ing">$0</div>
+      <div class="summary-card-sub" id="res-cant-ing">0 movimientos</div>
+    </div>
+    <div class="summary-card egr">
+      <div class="summary-card-label">Total Egresos</div>
+      <div class="summary-card-value" id="res-total-egr">$0</div>
+      <div class="summary-card-sub" id="res-cant-egr">0 movimientos</div>
+    </div>
+    <div class="summary-card top-ing">
+      <div class="summary-card-label">Mayor ingreso</div>
+      <div class="summary-card-value" id="res-top-ing-val">—</div>
+      <div class="summary-card-sub" id="res-top-ing-cat">sin datos</div>
+    </div>
+    <div class="summary-card top-egr">
+      <div class="summary-card-label">Mayor egreso</div>
+      <div class="summary-card-value" id="res-top-egr-val">—</div>
+      <div class="summary-card-sub" id="res-top-egr-cat">sin datos</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:16px 18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Saldo Neto</div>
+        <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;" id="res-saldo-neto">$0</div>
+      </div>
+      <div style="font-size:36px;" id="res-saldo-icon">⚖️</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div class="card-title" style="margin-bottom:0;">📄 Últimos movimientos</div>
+      <div style="display:flex;gap:8px;">
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#dbeafe;color:#1e40af;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          <span>📂</span> Importar
+          <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="importarExcel(event)">
+        </label>
+        <button onclick="exportarExcel()" style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:#16a34a;color:white;border:none;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;">
+          <span>⬇️</span> Exportar
+        </button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;">Desde</label>
+        <input type="date" id="filtro-desde" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;background:var(--surface2);color:var(--dark);font-family:'Inter',sans-serif;outline:none;">
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);white-space:nowrap;">Hasta</label>
+        <input type="date" id="filtro-hasta" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;background:var(--surface2);color:var(--dark);font-family:'Inter',sans-serif;outline:none;">
+      </div>
+      <button onclick="limpiarFiltros()" style="padding:6px 10px;background:var(--surface2);color:var(--muted);border:1.5px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;white-space:nowrap;">✕ Limpiar</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="movimientos-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Ingreso</th>
+            <th>Egreso</th>
+            <th>Categoría</th>
+            <th>Medio de pago</th>
+            <th>Detalle</th>
+            <th>Usuario</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-movimientos">
+          <tr><td colspan="6" class="empty-msg">Sin movimientos aún.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="screen" id="screen-presupuesto">
+
+  <div style="margin-bottom:14px;">
+    <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px;">Presupuesto</div>
+    <div style="font-size:12px;color:var(--muted);">Proyectá tus finanzas mes a mes</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;" id="objetivo-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#2563eb;">🎯 Objetivo de presupuesto</div>
+      <button onclick="editarObjetivo()" id="btn-editar-objetivo" style="padding:4px 10px;background:#dbeafe;color:#1e40af;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">✏️ Editar</button>
+    </div>
+    <div id="objetivo-vista">
+      <div id="objetivo-texto" style="font-size:14px;color:var(--dark);line-height:1.6;font-style:italic;">Sin objetivo definido aún.</div>
+    </div>
+    <div id="objetivo-edit" style="display:none;">
+      <textarea id="objetivo-input" rows="3" placeholder="Ej: Ahorrar $50.000 por mes para el fondo de emergencia..." style="width:100%;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;padding:10px 12px;font-size:13px;color:var(--dark);font-family:'Inter',sans-serif;outline:none;resize:none;line-height:1.5;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button onclick="cancelarObjetivo()" style="flex:1;padding:9px;background:#f3f4f6;color:#6b7280;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancelar</button>
+        <button onclick="guardarObjetivo()" style="flex:1;padding:9px;background:#1a1a24;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:4px;">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">Meses a proyectar</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button class="mes-btn active" onclick="setCantMeses(3,this)">3 meses</button>
+      <button class="mes-btn" onclick="setCantMeses(6,this)">6 meses</button>
+      <button class="mes-btn" onclick="setCantMeses(9,this)">9 meses</button>
+      <button class="mes-btn" onclick="setCantMeses(12,this)">12 meses</button>
+    </div>
+  </div>
+
+  <div class="meses-selector" id="meses-tabs"></div>
+  <div id="presup-contenido"></div>
+
+</div>
+
+<div class="screen" id="screen-caja">
+
+  <div style="margin-bottom:14px;">
+    <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px;">Cierre de Caja</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Registrá el estado de tu caja al cierre del día</div>
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:5px;">Cajero</label>
+        <input type="text" id="caja-cajero" class="form-input" style="width:100%;" readonly>
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:5px;">Turno</label>
+        <select class="form-select" id="caja-turno" style="width:100%;">
+          <option value="Mañana">Mañana</option>
+          <option value="Tarde">Tarde</option>
+          <option value="Noche">Noche</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📅 Fecha del cierre</div>
+    <input type="date" class="form-input" id="caja-fecha">
+  </div>
+
+  <div class="card">
+    <div class="card-title">🟢 Efectivo al inicio del día</div>
+    <div class="form-group">
+      <label class="form-label">Monto en efectivo ($)</label>
+      <input type="number" class="form-input" id="caja-inicio" placeholder="0.00" min="0" step="0.01" oninput="calcularCierre()">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💰 Ingresos del día</div>
+    <div id="caja-ingresos-rows">
+      <div class="presup-row" id="caja-ingreso-0">
+        <input class="presup-input-name" placeholder="Ej: Ventas, Cobros..." oninput="calcularCierre()">
+        <input class="presup-input-monto ing-monto" type="number" placeholder="0" min="0" oninput="calcularCierre()">
+        <button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(0)">✕</button>
+      </div>
+    </div>
+    <button class="btn-add-row" onclick="addCajaIngreso()">+ Agregar ingreso</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔴 Salidas de efectivo</div>
+    <div id="caja-salidas-rows">
+      <div class="presup-row" id="caja-salida-0">
+        <input class="presup-input-name" placeholder="Ej: Pago proveedor, Retiro..." oninput="calcularCierre()">
+        <input class="presup-input-monto egr-monto" type="number" placeholder="0" min="0" oninput="calcularCierre()">
+        <button class="btn-remove-row" onclick="removeCajaSalida(0)">✕</button>
+      </div>
+    </div>
+    <button class="btn-add-row" onclick="addCajaSalida()">+ Agregar salida</button>
+  </div>
+
+  <div style="background:var(--dark);border-radius:var(--radius);padding:20px;margin-bottom:14px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;margin-bottom:14px;">Resumen del cierre</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #374151;">
+      <div style="font-size:13px;color:#9ca3af;">Efectivo inicial</div>
+      <div style="font-size:14px;font-weight:600;color:white;" id="caja-res-inicio">$0</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #374151;">
+      <div style="font-size:13px;color:#9ca3af;">+ Total ingresos del día</div>
+      <div style="font-size:14px;font-weight:600;color:#4ade80;" id="caja-res-efectivo">$0</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #374151;">
+      <div style="font-size:13px;color:#9ca3af;">− Total salidas</div>
+      <div style="font-size:14px;font-weight:600;color:#f87171;" id="caja-res-salidas">$0</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:15px;font-weight:700;color:white;">Saldo al cierre</div>
+      <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;" id="caja-res-total">$0</div>
+    </div>
+  </div>
+
+  <button class="btn-primary" onclick="guardarCierre()" style="margin-bottom:24px;">💾 Cierre transitorio de caja</button>
+
+  <div class="card" id="caja-historial-card" style="display:none;">
+    <div class="card-title">🗂️ Cierres anteriores</div>
+    <div id="caja-historial"></div>
+  </div>
+
+</div>
+
+<div class="screen" id="screen-configuracion">
+  <div style="margin-bottom:14px;">
+    <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px;">Configuración</div>
+    <div style="font-size:12px;color:var(--muted);">Administrá tus categorías y medios de pago</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🟢 Categorías de Ingresos</div>
+    <div id="lista-cat-ingresos" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="nueva-cat-ingreso" class="form-input" placeholder="Nueva categoría...">
+      <button onclick="agregarItemConfig('ingreso')" style="padding:0 14px;background:var(--green);color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔴 Categorías de Egresos</div>
+    <div id="lista-cat-egresos" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="nueva-cat-egreso" class="form-input" placeholder="Nueva categoría...">
+      <button onclick="agregarItemConfig('egreso')" style="padding:0 14px;background:var(--red);color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💳 Medios de Pago</div>
+    <div id="lista-medios-pago" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="nuevo-medio-pago" class="form-input" placeholder="Nuevo medio...">
+      <button onclick="agregarItemConfig('medio')" style="padding:0 14px;background:var(--accent);color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-soporte">
+
+  <div class="soporte-hero">
+    <div class="soporte-avatar">👨‍💼</div>
+    <div class="soporte-name">Santiago Tolaba</div>
+    <div class="soporte-role">Contador Público · Desarrollador de Tus Finanzas</div>
+  </div>
+
+  <a href="https://instagram.com/santi.fabricio/" target="_blank" class="btn-ig">
+    <span style="font-size:22px;">📸</span>
+    Contactar en Instagram
+  </a>
+
+  <a href="https://wa.me/5493885107356?text=Buenas!%20Tengo%20una%20sugerencia%2Fduda%20sobre%20el%20uso%20de%20la%20App%20Tus%20Finanzas." target="_blank" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px;background:#25d366;color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;margin-bottom:14px;font-family:'Inter',sans-serif;">
+    <span style="font-size:22px;">💬</span>
+    Contactar por WhatsApp
+  </a>
+
+  <div class="card">
+    <div class="card-title">💬 ¿Necesitás ayuda?</div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:10px;">
+      Si tenés dudas sobre el uso de la app, problemas con alguna función o querés sugerir mejoras, podés contactarme directamente por Instagram.
+    </p>
+    <p style="font-size:13px;color:var(--muted);line-height:1.6;">
+      También podés consultarme sobre asesoría contable, impuestos, monotributo y gestión financiera de tu negocio.
+    </p>
+  </div>
+
+  <div class="card" style="text-align:center;">
+    <div style="font-size:28px;margin-bottom:10px;">💼</div>
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:4px;">Tus Finanzas</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Desarrollada por Santiago Tolaba</div>
+    <div style="font-size:11px;color:var(--muted);">Versión 1.0 · Todos los derechos reservados</div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="bottom-nav">
+  <div class="nav-item active" onclick="irA('movimientos',this)">
+    <div class="nav-icon">➕</div>
+    <div class="nav-label">Ingresar</div>
+  </div>
+  <div class="nav-item" onclick="irA('resumen',this)">
+    <div class="nav-icon">📊</div>
+    <div class="nav-label">Resumen</div>
+  </div>
+  <div class="nav-item" onclick="irA('presupuesto',this)">
+    <div class="nav-icon">📅</div>
+    <div class="nav-label">Presupuesto</div>
+  </div>
+  <div class="nav-item" onclick="irA('caja',this)">
+    <div class="nav-icon">🧾</div>
+    <div class="nav-label">Caja</div>
+  </div>
+  <div class="nav-item" onclick="irA('soporte',this)">
+    <div class="nav-icon">💬</div>
+    <div class="nav-label">Soporte</div>
+  </div>
+  <div class="nav-item" onclick="irA('configuracion',this)">
+  <div class="nav-icon">⚙️</div>
+  <div class="nav-label">Config</div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script type="module" src="script.js"></script>
+</body>
+</html>
