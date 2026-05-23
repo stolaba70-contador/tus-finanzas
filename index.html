@@ -150,14 +150,73 @@
       </div>
     </div>
 
-    <div class="form-row">
+    <!-- Monto manual (solo para egresos) -->
+<div class="form-row" id="row-monto-manual" style="display:none;">
+  <div class="form-group">
+    <label class="form-label">Monto ($)</label>
+    <input type="number" class="form-input" id="mov-monto" placeholder="0.00" min="0" step="0.01">
+  </div>
+</div>
+
+<!-- Selector de local (solo visible si features.locales = true) -->
+<div id="row-local" style="display:none;margin-bottom:12px;">
+  <label class="form-label">🏪 Local</label>
+  <div class="select-wrapper">
+    <select class="form-select" id="mov-local" onchange="onLocalChange()">
+      <option value="">— Seleccioná un local —</option>
+    </select>
+  </div>
+</div>
+
+<!-- Productos de la venta (solo para ingresos) -->
+<div id="row-producto" style="margin-bottom:12px;">
+  <label class="form-label">Productos / Servicios</label>
+
+  <!-- Lista de items agregados -->
+  <div id="items-venta" style="margin-bottom:10px;"></div>
+
+  <!-- Formulario para agregar un item -->
+  <div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+    <div style="position:relative;margin-bottom:10px;">
+      <input type="text" class="form-input" id="mov-producto-busqueda" 
+        placeholder="🔍 Buscar producto..." 
+        autocomplete="off"
+        oninput="filtrarProductos()" 
+        onfocus="filtrarProductos()"
+        onblur="setTimeout(() => document.getElementById('lista-busqueda-productos').style.display='none', 300)">
+      <input type="hidden" id="mov-producto">
+      <div id="lista-busqueda-productos" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:200px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+    </div>
+
+    <div class="form-row" style="margin-bottom:10px;">
       <div class="form-group">
-        <label class="form-label">Monto ($)</label>
-        <input type="number" class="form-input" id="mov-monto" placeholder="0.00" min="0" step="0.01">
+        <label class="form-label">Cantidad</label>
+        <input type="number" class="form-input" id="mov-cantidad" placeholder="1" min="1" step="1" value="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Precio unit. <button type="button" onclick="habilitarPrecioManual()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--accent);padding:0;">✏️</button></label>
+        <input type="number" class="form-input" id="mov-precio-unit" placeholder="0.00" min="0" step="0.01" readonly>
       </div>
     </div>
 
-    <div class="form-group" style="margin-bottom:14px;">
+    <div class="form-group" style="margin-bottom:10px;">
+      <label class="form-label">Categoría</label>
+      <div class="select-wrapper">
+        <select class="form-select" id="mov-item-categoria"></select>
+      </div>
+    </div>
+
+    <button type="button" onclick="agregarItemVenta()" style="width:100%;padding:10px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">+ Agregar a la venta</button>
+  </div>
+
+  <!-- Total -->
+  <div style="background:var(--dark);border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:13px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;">Total venta</span>
+    <span id="mov-total-display" style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#4ade80;">$0</span>
+  </div>
+</div>
+
+    <div class="form-group" id="row-categoria-general" style="margin-bottom:14px;display:none;">
   <label class="form-label">Categoría</label>
   <div class="select-wrapper">
     <select class="form-select" id="mov-categoria"></select>
@@ -317,6 +376,9 @@
         <select id="rep-usuario" onchange="aplicarFiltrosReporte()" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;background:var(--surface2);color:var(--dark);font-family:'Inter',sans-serif;outline:none;">
           <option value="">Todos los usuarios</option>
         </select>
+        <select id="rep-local" onchange="aplicarFiltrosReporte()" style="display:none;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;background:var(--surface2);color:var(--dark);font-family:'Inter',sans-serif;outline:none;">
+          <option value="">Todos los locales</option>
+        </select>
       </div>
     </div>
   </div>
@@ -351,6 +413,7 @@
             <th>Medio de pago</th>
             <th>Detalle</th>
             <th>Usuario</th>
+            <th id="th-local-reporte" style="display:none;">Local</th>
           </tr>
         </thead>
         <tbody id="tabla-reporte">
@@ -504,6 +567,34 @@
       <button onclick="agregarItemConfig('medio')" style="padding:0 14px;background:var(--accent);color:white;border:none;border-radius:9px;font-weight:600;">+</button>
     </div>
   </div>
+
+  <div class="card" id="seccion-empleados-config">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div class="card-title" style="margin-bottom:0;">👥 Empleados</div>
+      <button onclick="abrirModalEmpleado()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">+ Nuevo</button>
+    </div>
+    <div id="lista-empleados">
+      <div style="font-size:13px;color:var(--muted);">Cargando...</div>
+    </div>
+  </div>
+
+  <div class="card" id="seccion-locales-config" style="display:none;">
+    <div class="card-title">🏪 Locales</div>
+    <div id="lista-locales" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="nuevo-local-nombre" class="form-input" placeholder="Nombre del local...">
+      <button onclick="guardarLocal()" style="padding:0 14px;background:var(--accent);color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+    </div>
+  </div>
+
+  <div class="card">
+  <div class="card-title">📦 Categorías de Productos</div>
+  <div id="lista-cat-productos" style="margin-bottom:10px;"></div>
+  <div style="display:flex;gap:8px;">
+    <input type="text" id="nueva-cat-producto" class="form-input" placeholder="Nueva categoría...">
+    <button onclick="agregarCategoriaProducto()" style="padding:0 14px;background:#7c3aed;color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+  </div>
+</div>
 </div>
 
 <div class="screen" id="screen-soporte">
@@ -543,6 +634,202 @@
 
 </div>
 
+<div class="screen" id="screen-productos">
+
+  <div id="productos-lock" style="display:none;text-align:center;padding:60px 20px;">
+    <div style="font-size:52px;margin-bottom:16px;">🔒</div>
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:10px;">Función Premium</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:24px;">Los productos están disponibles en el plan Premium.</div>
+    <button class="btn-primary" style="max-width:220px;margin:0 auto;" onclick="irAPremium()">⭐ Ir a Premium</button>
+  </div>
+
+ <div id="productos-contenido">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;">📦 Productos</div>
+      <div style="display:flex;gap:6px;">
+        <button id="btn-descargar-productos" onclick="descargarProductosExcel()" title="Descargar lista" style="background:var(--green);color:white;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">📥</button>
+        <button id="btn-importar-precios" onclick="document.getElementById('input-importar-precios').click()" title="Importar precios" style="background:#f59e0b;color:white;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">📤</button>
+        <button id="btn-nuevo-producto" onclick="abrirModalProducto()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">+ Nuevo</button>
+      </div>
+    </div>
+    <input type="file" id="input-importar-precios" accept=".xlsx,.xls" style="display:none;" onchange="importarPreciosExcel(event)">
+
+<!-- Buscador + filtros -->
+<div style="margin-bottom:14px;">
+  <div id="row-filtro-local-productos" style="display:none;margin-bottom:8px;">
+    <div class="select-wrapper">
+      <select class="form-select" id="filtro-local-productos" onchange="renderProductos()">
+        <option value="">Todos los locales</option>
+      </select>
+    </div>
+  </div>
+  <input type="text" class="form-input" id="filtro-producto-busqueda" 
+    placeholder="🔍 Buscar por nombre..." 
+    oninput="renderProductos()"
+    style="margin-bottom:8px;">
+
+  <button type="button" onclick="toggleFiltrosProductos()" 
+    style="width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:pointer;color:var(--dark);font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;">
+    <span>🔧 Filtros</span>
+    <span id="filtros-arrow">▾</span>
+  </button>
+
+  <div id="filtros-productos" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px;">
+    
+    <div class="form-group" style="margin-bottom:10px;">
+      <label class="form-label">Categoría</label>
+      <div class="select-wrapper">
+        <select class="form-select" id="filtro-prod-categoria" onchange="renderProductos()">
+          <option value="">Todas las categorías</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-bottom:10px;">
+      <div class="form-group">
+        <label class="form-label">Precio mín.</label>
+        <input type="number" class="form-input" id="filtro-prod-precio-min" placeholder="0" oninput="renderProductos()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Precio máx.</label>
+        <input type="number" class="form-input" id="filtro-prod-precio-max" placeholder="∞" oninput="renderProductos()">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:10px;">
+      <label class="form-label">Estado de stock</label>
+      <div class="select-wrapper">
+        <select class="form-select" id="filtro-prod-stock" onchange="renderProductos()">
+          <option value="">Todos</option>
+          <option value="normal">Stock normal 🟢</option>
+          <option value="bajo">Stock bajo 🟡</option>
+          <option value="agotado">Sin stock 🔴</option>
+        </select>
+      </div>
+    </div>
+
+    <button type="button" onclick="limpiarFiltrosProductos()" 
+      style="width:100%;padding:8px;background:var(--surface2);color:var(--muted);border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">
+      Limpiar filtros
+    </button>
+  </div>
+</div>
+
+    <div id="lista-productos">
+      <div class="empty-msg"><div class="empty-icon">📦</div>No hay productos cargados</div>
+    </div>
+  </div>
+
+  <!-- Modal nuevo/editar producto -->
+  <div id="modal-producto" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:flex-end;justify-content:center;">
+    <div style="background:var(--surface);border-radius:20px 20px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;">
+      <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:16px;" id="modal-producto-titulo">Nuevo producto</div>
+
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label">Nombre</label>
+        <input type="text" class="form-input" id="prod-nombre" placeholder="Ej: Remera talle M">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+  <label class="form-label">Categoría</label>
+  <div class="select-wrapper">
+    <select class="form-select" id="prod-categoria">
+      <option value="">— Sin categoría —</option>
+    </select>
+  </div>
+</div>
+        <div class="form-group">
+          <label class="form-label">Unidad</label>
+          <input type="text" class="form-input" id="prod-unidad" placeholder="Ej: unidad">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Precio costo ($)</label>
+          <input type="number" class="form-input" id="prod-costo" placeholder="0.00" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Precio venta ($)</label>
+          <input type="number" class="form-input" id="prod-venta" placeholder="0.00" min="0" step="0.01">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Stock actual</label>
+          <input type="number" class="form-input" id="prod-stock" placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stock mínimo</label>
+          <input type="number" class="form-input" id="prod-stock-min" placeholder="0" min="0">
+        </div>
+      </div>
+
+      <input type="hidden" id="prod-id">
+
+      <div class="form-group" id="row-prod-local" style="display:none;margin-bottom:12px;">
+        <label class="form-label">🏪 Local</label>
+        <div class="select-wrapper">
+          <select class="form-select" id="prod-local">
+            <option value="">— Sin local asignado —</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button onclick="cerrarModalProducto()" style="flex:1;padding:13px;background:var(--surface2);color:var(--dark);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancelar</button>
+        <button onclick="guardarProducto()" style="flex:2;padding:13px;background:var(--dark);color:white;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="modal-empleado" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border-radius:20px;padding:24px;width:90%;max-width:420px;max-height:90vh;overflow-y:auto;">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:16px;" id="modal-empleado-titulo">Nuevo empleado</div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label class="form-label">Nombre</label>
+      <input type="text" class="form-input" id="emp-nombre" placeholder="Nombre completo">
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;" id="row-emp-email">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="emp-email" placeholder="correo@ejemplo.com">
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;" id="row-emp-password">
+      <label class="form-label">Contraseña</label>
+      <input type="password" class="form-input" id="emp-password" placeholder="Mínimo 6 caracteres">
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label class="form-label">Rol</label>
+      <div class="select-wrapper">
+        <select class="form-select" id="emp-rol">
+          <option value="empleado">Empleado</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:16px;" id="row-emp-locales">
+      <label class="form-label">Locales asignados</label>
+      <div id="emp-locales-checks" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+    </div>
+
+    <div id="modal-empleado-error" style="font-size:12px;color:var(--red);min-height:18px;margin-bottom:12px;"></div>
+
+    <div style="display:flex;gap:10px;">
+      <button onclick="cerrarModalEmpleado()" style="flex:1;padding:13px;background:var(--surface2);color:var(--dark);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancelar</button>
+      <button onclick="guardarEmpleado()" id="btn-guardar-empleado" style="flex:2;padding:13px;background:var(--dark);color:white;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <div class="bottom-nav">
@@ -554,6 +841,10 @@
     <div class="nav-icon">📋</div>
     <div class="nav-label">Reporte</div>
   </div>
+  <div class="nav-item" onclick="irA('productos',this)">
+  <div class="nav-icon">📦</div>
+  <div class="nav-label">Productos</div>
+</div>
   <div class="nav-item" onclick="irA('caja',this)">
     <div class="nav-icon">🧾</div>
     <div class="nav-label">Caja</div>
