@@ -4,6 +4,14 @@ const SUPABASE_KEY = 'sb_publishable_HrCnN_0l6NjjIy_4z6jMJg_CiCCKXCg';
 const { createClient } = supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Restaurar sesión al recargar la página
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user && !usuarioActual) {
+    usuarioActual = session.user;
+    await mostrarApp();
+  }
+});
+
 // ══ ESTADO ══
 let usuarioActual = null;
 let rolActual = null;
