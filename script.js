@@ -5,11 +5,13 @@ const { createClient } = supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Restaurar sesión al recargar la página
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
-  if (session?.user && !usuarioActual) {
-    usuarioActual = session.user;
-    await mostrarApp();
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user && !usuarioActual) {
+      usuarioActual = session.user;
+      await mostrarApp();
+    }
+  });
 });
 
 // ══ ESTADO ══
