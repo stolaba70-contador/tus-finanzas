@@ -49,7 +49,7 @@ async function mostrarApp() {
   const loginEl = document.getElementById('login-screen');
   loginEl.style.opacity = '0';
   loginEl.style.transition = 'opacity 0.4s';
-  setTimeout(() => loginEl.style.display = 'none', 400);
+
   const emailCorto = usuarioActual.email.split('@')[0];
   document.getElementById('header-user-email').textContent = emailCorto;
   document.getElementById('caja-cajero').value = emailCorto;
@@ -65,15 +65,18 @@ async function mostrarApp() {
 
   await cargarMovimientosSupabase();
   await cargarCierresSupabase();
-  await cargarFeatures();
-  if (rolActual === 'admin') await cargarEmpleados();
   await cargarCategorias();
   await cargarCategoriasProductos();
   await cargarProductos();
   verificarVencimiento();
   actualizarBarraMonotributo();
-}
 
+  setTimeout(async () => {
+    loginEl.style.display = 'none';
+    await cargarFeatures();
+    if (rolActual === 'admin') await cargarEmpleados();
+  }, 400);
+}
 async function cargarFeatures() {
   const { data: perfil } = await supabaseClient
     .from('perfiles').select('organizacion_id').eq('id', usuarioActual.id).single();
