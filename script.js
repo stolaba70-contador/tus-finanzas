@@ -7,7 +7,7 @@ const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 // Restaurar sesión al recargar la página
 document.addEventListener('DOMContentLoaded', () => {
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user && !usuarioActual) {
+    if (event === 'INITIAL_SESSION' && session?.user && !usuarioActual) {
       usuarioActual = session.user;
       await mostrarApp();
     }
