@@ -38,15 +38,19 @@ exports.handler = async function(event) {
     }
 
     // Insertar movimiento
-    const insertRes = await fetch(
-      `${process.env.SUPABASE_URL}/rest/v1/movimientos`,
-      {
-        method: 'POST',
-        headers: { ...headers, 'Prefer': 'return=representation' },
-        body: JSON.stringify(movimiento)
-      }
-    );
+    const { esProducto, productoId, ...movimientoLimpio } = movimiento;
+
+const insertRes = await fetch(
+  `${process.env.SUPABASE_URL}/rest/v1/movimientos`,
+  {
+    method: 'POST',
+    headers: { ...headers, 'Prefer': 'return=representation' },
+    body: JSON.stringify(movimientoLimpio)
+  }
+);
     const data = await insertRes.json();
+console.log('Insert status:', insertRes.status);
+console.log('Insert response:', JSON.stringify(data));
 
     // Descontar stock si corresponde
     if (movimiento.esProducto && movimiento.productoId && movimiento.cantidad > 0 && movimiento.tipo === 'ingreso') {
