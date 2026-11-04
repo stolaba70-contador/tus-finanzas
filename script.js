@@ -42,7 +42,7 @@ async function loginSubmit() {
   btn.disabled = false;
   if (error) { errorEl.textContent = '❌ Email o contraseña incorrectos.'; return; }
   usuarioActual = data.user;
-  mostrarApp();
+  await verificarOnboarding(usuarioActual);
 }
 
 async function mostrarApp() {
@@ -397,6 +397,17 @@ function aplicarRol() {
 
 async function cerrarSesion() {
   document.getElementById('settings-menu').style.display = 'none';
+  
+  const modalPendiente = document.getElementById('pendiente-modal');
+  if (modalPendiente) modalPendiente.classList.add('hidden');
+  
+  const modalOnboarding = document.getElementById('onboarding-modal');
+  if (modalOnboarding) modalOnboarding.classList.add('hidden');
+
+  if (typeof window.mostrarFormularioRegistro === 'function') {
+    window.mostrarFormularioRegistro(false);
+  }
+
   await supabaseClient.auth.signOut();
   usuarioActual = null;
   movimientos = [];
@@ -1687,12 +1698,12 @@ if (temaGuardado === 'oscuro') {
   if (btnTema) btnTema.innerHTML = '☀️ Modo claro';
 }
 
-// ══ INIT: verificar sesión activa ══
+// == INIT: verificar sesión activa ==
 (async () => {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     usuarioActual = session.user;
-    mostrarApp();
+    await verificarOnboarding(usuarioActual);
   }
 })();
 
@@ -2346,4 +2357,206 @@ async function importarPreciosExcel(event) {
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// Alternar entre vista de Login y Registro
+window.mostrarFormularioRegistro = function(mostrarRegistro) {
+  const loginBox = document.getElementById('form-login-container');
+  const regBox = document.getElementById('form-registro-container');
+  const subtitle = document.getElementById('login-subtitle');
+
+  if (mostrarRegistro) {
+    if (loginBox) loginBox.classList.add('hidden');
+    if (regBox) regBox.classList.remove('hidden');
+    if (subtitle) subtitle.textContent = 'Creá tu cuenta gratuita 🚀';
+  } else {
+    if (regBox) regBox.classList.add('hidden');
+    if (loginBox) loginBox.classList.remove('hidden');
+    if (subtitle) subtitle.textContent = '¡Hola de nuevo! 👋';
+  }
+};
+
+// Función para registrar un nuevo usuario
+window.registroSubmit = async function() {
+  const nombre = document.getElementById('reg-nombre').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const errorEl = document.getElementById('reg-error');
+  const btn = document.getElementById('btn-registro');
+
+  errorEl.textContent = '';
+  if (!nombre || !email || password.length < 6) {
+    errorEl.textContent = 'Completá tu nombre, email y una clave de al menos 6 caracteres.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+      data: { nombre: nombre }
+    }
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Crear cuenta';
+
+  if (error) {
+    errorEl.textContent = error.message;
+    return;
+  }
+
+  if (data.user) {
+    usuarioActual = data.user;
+    await verificarOnboarding(data.user);
+  }
+};
+
+// Función que se ejecuta tras validar la sesión del usuario
+async function verificarOnboarding(user) {
+  const { data: perfil, error } = await supabaseClient
+    .from('perfiles')
+    .select('*, organizaciones(*)')
+    .eq('id', user.id)
+    .single();
+
+  if (error) {
+    console.error('Error al obtener perfil:', error);
+    return;
+  }
+
+  // 1. Verificar si la cuenta está aprobada por vos en Supabase
+  if (perfil.activo === false) {
+    document.getElementById('login-screen').style.display = 'none';
+    
+    // Ocultar elementos principales de la app por seguridad visual
+    const appHeader = document.querySelector('.app-header');
+    if (appHeader) appHeader.style.display = 'none';
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) bottomNav.style.display = 'none';
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+
+    document.getElementById('pendiente-modal').classList.remove('hidden');
+    return;
+  }
+
+  // Si está activo, asegurarse de ocultar el cartel de pendiente
+  const modalPendiente = document.getElementById('pendiente-modal');
+  if (modalPendiente) modalPendiente.classList.add('hidden');
+
+  // 2. Si está aprobada pero no completó el onboarding, mostrar el selector Personal / Negocio
+  if (!perfil.onboarding_completado && !perfil.organizacion_id) {
+    document.getElementById('login-screen').style.display = 'none';
+    mostrarModalOnboarding(user);
+  } else {
+    // 3. Si está aprobada y ya eligió su modo, entrar directo a la app
+    mostrarApp();
+    cargarInterfaz(perfil);
+  }
+}
+
+function mostrarModalOnboarding(user) {
+  const modal = document.getElementById('onboarding-modal');
+  if (!modal) return;
+
+  // Ocultar cabecera y barra de navegación por seguridad visual
+  const appHeader = document.querySelector('.app-header');
+  if (appHeader) appHeader.style.display = 'none';
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+
+  modal.classList.remove('hidden');
+
+  const btnPersonal = document.getElementById('btn-opcion-personal');
+  const btnNegocio = document.getElementById('btn-opcion-negocio');
+  const formNegocio = document.getElementById('form-datos-negocio');
+  const btnConfirmarNegocio = document.getElementById('btn-confirmar-negocio');
+
+  // Opción 1: Finanzas Personales
+  btnPersonal.onclick = async () => {
+    btnPersonal.disabled = true;
+    await completarOnboarding(user.id, 'personal', 'Finanzas Personales');
+    modal.classList.add('hidden');
+    window.location.reload();
+  };
+
+  // Opción 2: Negocio (muestra input para el nombre del local)
+  btnNegocio.onclick = () => {
+    formNegocio.classList.remove('hidden');
+  };
+
+  btnConfirmarNegocio.onclick = async () => {
+    const nombreComercio = document.getElementById('nombre-negocio').value.trim();
+    if (!nombreComercio) {
+      alert('Por favor ingresá el nombre de tu negocio.');
+      return;
+    }
+    btnConfirmarNegocio.disabled = true;
+    await completarOnboarding(user.id, 'negocio', nombreComercio);
+    modal.classList.add('hidden');
+    window.location.reload();
+  };
+}
+
+async function completarOnboarding(userId, tipo, nombreOrganizacion) {
+  try {
+    // 1. Crear organización en Supabase usando supabaseClient
+    const { data: orgData, error: orgError } = await supabaseClient
+      .from('organizaciones')
+      .insert({
+        nombre: nombreOrganizacion,
+        tipo: tipo,
+        features: tipo === 'negocio' 
+          ? { stock: true, caja: true, empleados: true } 
+          : { presupuestos: true, ia_scanner: true }
+      })
+      .select()
+      .single();
+
+    if (orgError) throw orgError;
+
+    // 2. Si es negocio, crear local por defecto
+    if (tipo === 'negocio') {
+      await supabaseClient.from('locales').insert({
+        organizacion_id: orgData.id,
+        nombre: 'Casa Central',
+        activo: true
+      });
+    }
+
+    // 3. Actualizar perfil del usuario
+    const { error: perfilError } = await supabaseClient
+      .from('perfiles')
+      .update({
+        organizacion_id: orgData.id,
+        modo_activo: tipo,
+        onboarding_completado: true
+      })
+      .eq('id', userId);
+
+    if (perfilError) throw perfilError;
+
+  } catch (err) {
+    console.error('Error al completar onboarding:', err);
+    alert('Ocurrió un error guardando tus preferencias.');
+  }
+}
+
+// 4. Renderizado según el tipo
+function cargarInterfaz(perfil) {
+  const modo = perfil.modo_activo;
+  const menuNegocio = document.querySelectorAll('.modulo-negocio');
+  const menuPersonal = document.querySelectorAll('.modulo-personal');
+
+  if (modo === 'negocio') {
+    menuNegocio.forEach(el => el.classList.remove('hidden'));
+    menuPersonal.forEach(el => el.classList.add('hidden'));
+  } else {
+    menuNegocio.forEach(el => el.classList.add('hidden'));
+    menuPersonal.forEach(el => el.classList.remove('hidden'));
+  }
 }

@@ -10,13 +10,46 @@
 </head>
 <body>
 
+<!-- Modal Onboarding -->
+<div id="onboarding-modal" class="modal-overlay hidden" style="background:#1a1a24;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div class="onboarding-card">
+    <h2>¡Te damos la bienvenida!</h2>
+    <p>Seleccioná cómo vas a utilizar la plataforma para personalizar tu panel:</p>
+    
+    <div class="onboarding-options">
+      <button id="btn-opcion-personal" class="btn-opcion">
+        <div class="opcion-icono">👤</div>
+        <h3>Finanzas Personales</h3>
+        <p>Control de gastos e ingresos, presupuestos mensuales y carga rápida con IA (audio y tickets).</p>
+      </button>
+
+      <button id="btn-opcion-negocio" class="btn-opcion">
+        <div class="opcion-icono">🏪</div>
+        <h3>Tengo un Negocio / Emprendimiento</h3>
+        <p>Control de stock, caja diaria, registro de ventas, gestión de locales y empleados.</p>
+      </button>
+    </div>
+
+    <!-- Subformulario que aparece solo si elige Negocio -->
+    <div id="form-datos-negocio" class="hidden">
+      <label for="nombre-negocio">Nombre de tu comercio o negocio:</label>
+      <input type="text" id="nombre-negocio" placeholder="Ej: Kiosco San Cayetano" />
+      <button id="btn-confirmar-negocio" class="btn-confirmar">Comenzar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Pantalla de Login y Registro -->
 <div id="login-screen" style="position:fixed;inset:0;background:var(--dark-login, #1a1a24);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;padding:32px;">
-  <div style="text-align:center;margin-bottom:40px;">
+  <div style="text-align:center;margin-bottom:32px;">
     <div style="width:72px;height:72px;background:var(--accent);border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px;">💼</div>
     <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:white;letter-spacing:-1px;">Tus Finanzas</div>
-    <div style="font-size:16px;color:#c8f064;margin-top:8px;font-weight:600;">¡Hola de nuevo! 👋</div>
+    <div id="login-subtitle" style="font-size:16px;color:#c8f064;margin-top:8px;font-weight:600;">¡Hola de nuevo! 👋</div>
   </div>
-  <div style="width:100%;max-width:320px;">
+
+  <!-- Formulario de Ingreso -->
+  <div id="form-login-container" style="width:100%;max-width:320px;">
     <div style="margin-bottom:14px;">
       <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;display:block;margin-bottom:6px;">Email</label>
       <input type="email" id="login-email" placeholder="tu@email.com"
@@ -31,9 +64,49 @@
     </div>
     <div id="login-error" style="text-align:center;color:#f87171;font-size:13px;margin-bottom:14px;min-height:20px;"></div>
     <button onclick="loginSubmit()" id="btn-login"
-      style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">
+      style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;margin-bottom:16px;">
       Ingresar
     </button>
+    <div style="text-align:center;font-size:13px;color:#9ca3af;">
+      ¿No tenés cuenta? <button type="button" onclick="mostrarFormularioRegistro(true)" style="background:none;border:none;color:#c8f064;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Registrate acá</button>
+    </div>
+  </div>
+
+  <!-- Formulario de Registro (Sign Up) -->
+  <div id="form-registro-container" class="hidden" style="width:100%;max-width:320px;">
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;display:block;margin-bottom:6px;">Tu Nombre</label>
+      <input type="text" id="reg-nombre" placeholder="Ej: Juan Pérez"
+        style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:13px 16px;font-size:15px;color:white;font-family:'Inter',sans-serif;outline:none;">
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;display:block;margin-bottom:6px;">Email</label>
+      <input type="email" id="reg-email" placeholder="tu@email.com"
+        style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:13px 16px;font-size:15px;color:white;font-family:'Inter',sans-serif;outline:none;">
+    </div>
+    <div style="margin-bottom:6px;">
+      <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#6b7280;display:block;margin-bottom:6px;">Contraseña (mín. 6 caracteres)</label>
+      <input type="password" id="reg-password" placeholder="••••••••"
+        style="width:100%;background:#111827;border:1.5px solid #374151;border-radius:9px;padding:13px 16px;font-size:15px;color:white;font-family:'Inter',sans-serif;outline:none;">
+    </div>
+    <div id="reg-error" style="text-align:center;color:#f87171;font-size:13px;margin-bottom:14px;min-height:20px;"></div>
+    <button onclick="registroSubmit()" id="btn-registro"
+      style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;margin-bottom:16px;">
+      Crear cuenta
+    </button>
+    <div style="text-align:center;font-size:13px;color:#9ca3af;">
+      ¿Ya tenés cuenta? <button type="button" onclick="mostrarFormularioRegistro(false)" style="background:none;border:none;color:#c8f064;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Iniciar sesión</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de Cuenta Pendiente de Aprobación -->
+<div id="pendiente-modal" class="modal-overlay hidden" style="background:#1a1a24;z-index:9999;display:flex;align-items:center;justify-content:center;">
+  <div class="onboarding-card" style="max-width:420px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:12px;">⏳</div>
+    <h2>Cuenta en revisión</h2>
+    <p style="margin-bottom:20px;">Tu solicitud de registro fue recibida correctamente. El administrador debe activar tu cuenta en el sistema para que puedas comenzar a operar.</p>
+    <button onclick="cerrarSesion()" class="btn-confirmar" style="margin-top:8px;background:var(--accent);color:white;width:100%;cursor:pointer;">¡Entendido!</button>
   </div>
 </div>
 
@@ -448,7 +521,7 @@
 
 </div>
 
-<div class="screen" id="screen-caja">
+<div class="screen modulo-negocio" id="screen-caja">
 
   <div style="margin-bottom:14px;">
     <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:4px;">Cierre de Caja</div>
@@ -568,7 +641,7 @@
     </div>
   </div>
 
-  <div class="card" id="seccion-empleados-config">
+<div class="card modulo-negocio" id="seccion-empleados-config">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
       <div class="card-title" style="margin-bottom:0;">👥 Empleados</div>
       <button onclick="abrirModalEmpleado()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">+ Nuevo</button>
@@ -587,14 +660,14 @@
     </div>
   </div>
 
-  <div class="card">
-  <div class="card-title">📦 Categorías de Productos</div>
-  <div id="lista-cat-productos" style="margin-bottom:10px;"></div>
-  <div style="display:flex;gap:8px;">
-    <input type="text" id="nueva-cat-producto" class="form-input" placeholder="Nueva categoría...">
-    <button onclick="agregarCategoriaProducto()" style="padding:0 14px;background:#7c3aed;color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+  <div class="card modulo-negocio" id="seccion-cat-productos-config">
+    <div class="card-title">📦 Categorías de Productos</div>
+    <div id="lista-cat-productos" style="margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="nueva-cat-producto" class="form-input" placeholder="Nueva categoría...">
+      <button onclick="agregarCategoriaProducto()" style="padding:0 14px;background:#7c3aed;color:white;border:none;border-radius:9px;font-weight:600;">+</button>
+    </div>
   </div>
-</div>
 </div>
 
 <div class="screen" id="screen-soporte">
@@ -634,7 +707,7 @@
 
 </div>
 
-<div class="screen" id="screen-productos">
+<div class="screen modulo-negocio" id="screen-productos">
 
   <div id="productos-lock" style="display:none;text-align:center;padding:60px 20px;">
     <div style="font-size:52px;margin-bottom:16px;">🔒</div>
@@ -841,11 +914,11 @@
     <div class="nav-icon">📋</div>
     <div class="nav-label">Reporte</div>
   </div>
-  <div class="nav-item" onclick="irA('productos',this)">
+  <div class="nav-item modulo-negocio" onclick="irA('productos',this)">
   <div class="nav-icon">📦</div>
   <div class="nav-label">Productos</div>
 </div>
-  <div class="nav-item" onclick="irA('caja',this)">
+  <div class="nav-item modulo-negocio" onclick="irA('caja',this)">
     <div class="nav-icon">🧾</div>
     <div class="nav-label">Caja</div>
   </div>
@@ -864,3 +937,4 @@
 <script type="module" src="script.js"></script>
 </body>
 </html>
+
