@@ -1314,12 +1314,55 @@ function addCajaSalida() {
 
 function removeCajaSalida(idx) { const el = document.getElementById('caja-salida-' + idx); if (el) { el.remove(); calcularCierre(); } }
 
+function cargarMovimientosEfectivoEnCaja() {
+  const fechaCaja = document.getElementById('caja-fecha').value;
+  if (!fechaCaja) return;
+
+  const movsEfectivo = movimientos.filter(m => m.fecha === fechaCaja && (m.medio === 'Efectivo' || !m.medio));
+  const ingRowsCont = document.getElementById('caja-ingresos-rows');
+  const salRowsCont = document.getElementById('caja-salidas-rows');
+
+  const ingresosExistentes = getIngresosRows().map(r => r.nombre.trim());
+  const salidasExistentes = getSalidasRows().map(r => r.nombre.trim());
+
+  const ingresosEfectivo = movsEfectivo.filter(m => m.tipo === 'ingreso');
+  const egresosEfectivo = movsEfectivo.filter(m => m.tipo === 'egreso');
+
+  ingresosEfectivo.forEach(m => {
+    const concepto = m.detalle || m.categoria || 'Venta en efectivo';
+    if (!ingresosExistentes.includes(concepto)) {
+      const idx = cajaIngresosCount++;
+      const div = document.createElement('div');
+      div.className = 'presup-row'; 
+      div.id = 'caja-ingreso-' + idx;
+      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(${idx})">✕</button>`;
+      ingRowsCont.appendChild(div);
+    }
+  });
+
+  egresosEfectivo.forEach(m => {
+    const concepto = m.detalle || m.categoria || 'Egreso en efectivo';
+    if (!salidasExistentes.includes(concepto)) {
+      const idx = cajaSalidasCount++;
+      const div = document.createElement('div');
+      div.className = 'presup-row'; 
+      div.id = 'caja-salida-' + idx;
+      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(${idx})">✕</button>`;
+      salRowsCont.appendChild(div);
+    }
+  });
+
+  calcularCierre();
+  showToast('🔄 Movimientos en efectivo cargados');
+}
+
 function resetCajaForm() {
   document.getElementById('caja-inicio').value = '';
   document.getElementById('caja-ingresos-rows').innerHTML = `<div class="presup-row" id="caja-ingreso-0"><input class="presup-input-name" placeholder="Ej: Ventas, Cobros..." oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" placeholder="0" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(0)">✕</button></div>`;
   document.getElementById('caja-salidas-rows').innerHTML = `<div class="presup-row" id="caja-salida-0"><input class="presup-input-name" placeholder="Ej: Pago proveedor, Retiro..." oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" placeholder="0" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(0)">✕</button></div>`;
   cajaSalidasCount = 1; cajaIngresosCount = 1;
   calcularCierre(); document.getElementById('caja-fecha').valueAsDate = new Date();
+  cargarMovimientosEfectivoEnCaja();
 }
 
 async function guardarCierre() {

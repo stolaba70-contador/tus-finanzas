@@ -543,8 +543,11 @@
   </div>
 
   <div class="card">
-    <div class="card-title">📅 Fecha del cierre</div>
-    <input type="date" class="form-input" id="caja-fecha">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>📅 Fecha del cierre</span>
+      <button type="button" onclick="cargarMovimientosEfectivoEnCaja()" style="background:var(--accent-light);color:var(--accent);border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;">🔄 Sincronizar efectivo</button>
+    </div>
+    <input type="date" class="form-input" id="caja-fecha" onchange="cargarMovimientosEfectivoEnCaja()">
   </div>
 
   <div class="card">
