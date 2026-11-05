@@ -1684,6 +1684,7 @@ window.removeCajaSalida = removeCajaSalida;
 window.guardarCierre = guardarCierre;
 window.editarCierre = editarCierre;
 window.cerrarDefinitivo = cerrarDefinitivo;
+window.cargarMovimientosEfectivoEnCaja = cargarMovimientosEfectivoEnCaja;
 window.exportarCajaExcel = exportarCajaExcel;
 window.exportarCajaPDF = exportarCajaPDF;
 window.actualizarBarraMonotributo = actualizarBarraMonotributo;
