@@ -517,6 +517,12 @@ let catIngresos = [];
 let catEgresos = [];
 let mediosPago = [];
 
+const LIMITES_MONOTRIBUTO = {
+  'A': 10277988.13, 'B': 15058447.71, 'C': 21113696.52, 'D': 26212853.42,
+  'E': 30833964.37, 'F': 38642048.36, 'G': 46211109.37, 'H': 70113407.33,
+  'I': 78479211.62, 'J': 89872640.30, 'K': 108357084.05
+};
+
 load();
 
 function irA(pantalla, el) {
@@ -1318,7 +1324,6 @@ function cargarMovimientosEfectivoEnCaja() {
   const inputFecha = document.getElementById('caja-fecha').value;
   if (!inputFecha) return;
 
-  // Normalizar la fecha del input (puede venir como YYYY-MM-DD o DD/MM/YYYY)
   let fechaBusqueda = inputFecha;
   if (inputFecha.includes('/')) {
     const [d, m, a] = inputFecha.split('/');
@@ -1798,12 +1803,6 @@ if (temaGuardado === 'oscuro') {
     await verificarOnboarding(usuarioActual);
   }
 })();
-
-const LIMITES_MONOTRIBUTO = {
-  'A': 10277988.13, 'B': 15058447.71, 'C': 21113696.52, 'D': 26212853.42,
-  'E': 30833964.37, 'F': 38642048.36, 'G': 46211109.37, 'H': 70113407.33,
-  'I': 78479211.62, 'J': 89872640.30, 'K': 108357084.05
-};
 
 function actualizarBarraMonotributo() {
   const categoria = document.getElementById('mono-categoria').value;
