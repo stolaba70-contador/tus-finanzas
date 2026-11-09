@@ -27,6 +27,8 @@ let localesActuales = [];
 let localSeleccionadoId = null;
 let empleados = [];
 let empleadoEditandoId = null;
+let productos = [];
+let productoEditandoId = null;
 
 async function loginSubmit() {
   const email = document.getElementById('login-email').value.trim();
@@ -1373,41 +1375,6 @@ function cargarMovimientosEfectivoEnCaja() {
   calcularCierre();
   showToast('🔄 Movimientos en efectivo cargados');
 }
-  const ingRowsCont = document.getElementById('caja-ingresos-rows');
-  const salRowsCont = document.getElementById('caja-salidas-rows');
-
-  const ingresosExistentes = getIngresosRows().map(r => r.nombre.trim());
-  const salidasExistentes = getSalidasRows().map(r => r.nombre.trim());
-
-  const ingresosEfectivo = movsEfectivo.filter(m => m.tipo === 'ingreso');
-  const egresosEfectivo = movsEfectivo.filter(m => m.tipo === 'egreso');
-
-  ingresosEfectivo.forEach(m => {
-    const concepto = m.detalle || m.categoria || 'Venta en efectivo';
-    if (!ingresosExistentes.includes(concepto)) {
-      const idx = cajaIngresosCount++;
-      const div = document.createElement('div');
-      div.className = 'presup-row'; 
-      div.id = 'caja-ingreso-' + idx;
-      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(${idx})">✕</button>`;
-      ingRowsCont.appendChild(div);
-    }
-  });
-
-  egresosEfectivo.forEach(m => {
-    const concepto = m.detalle || m.categoria || 'Egreso en efectivo';
-    if (!salidasExistentes.includes(concepto)) {
-      const idx = cajaSalidasCount++;
-      const div = document.createElement('div');
-      div.className = 'presup-row'; 
-      div.id = 'caja-salida-' + idx;
-      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(${idx})">✕</button>`;
-      salRowsCont.appendChild(div);
-    }
-  });
-
-  calcularCierre();
-  showToast('🔄 Movimientos en efectivo cargados');
 
 function resetCajaForm() {
   document.getElementById('caja-inicio').value = '';
@@ -1839,9 +1806,7 @@ const catGuardada = localStorage.getItem('tus-finanzas-cat-mono') || 'A';
 document.getElementById('mono-categoria').value = catGuardada;
 actualizarBarraMonotributo();
 
-// ══ PRODUCTOS ══
-let productos = [];
-let productoEditandoId = null;
+
 
 async function cargarProductos() {
   const { data: perfil } = await supabaseClient
