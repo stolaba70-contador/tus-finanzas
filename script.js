@@ -2481,7 +2481,6 @@ async function verificarOnboarding(user) {
 }
 
 async function mostrarApp(perfilPreCargado = null) {
-  // 1. Ocultar el login AL INSTANTE sin esperar a las tablas
   const loginEl = document.getElementById('login-screen');
   loginEl.style.display = 'none';
 
@@ -2489,7 +2488,6 @@ async function mostrarApp(perfilPreCargado = null) {
   document.getElementById('header-user-email').textContent = emailCorto;
   document.getElementById('caja-cajero').value = emailCorto;
 
-  // 2. Reutilizar el perfil que ya trajo verificarOnboarding (ahorra otra consulta)
   let perfil = perfilPreCargado;
   if (!perfil) {
     const { data } = await supabaseClient
@@ -2502,15 +2500,35 @@ async function mostrarApp(perfilPreCargado = null) {
 
   rolActual = perfil?.rol || 'empleado';
   orgActualId = perfil?.organizacion_id || null;
-  featuresActuales = perfil?.organizaciones?.features || { locales: false };
+
+  // Obtener features de forma segura (maneja objeto o array de Supabase)
+  // Obtener features de forma segura (maneja objeto o array de Supabase)
+  let orgData = perfil?.organizaciones;
+  if (Array.isArray(orgData)) orgData = orgData[0];
+  
+  featuresActuales = orgData?.features || {};
+  
+  // Forzamos que los locales estén siempre habilitados en cuentas de tipo negocio
+  if (perfil?.modo_activo === 'negocio' || orgData?.tipo === 'negocio' || !featuresActuales.locales) {
+    featuresActuales.locales = true;
+  }
+
+  // Si por alguna razón no vinieron las features en el perfil, las consultamos directo
+  if (!orgData && orgActualId) {
+    const { data: orgObj } = await supabaseClient
+      .from('organizaciones')
+      .select('features')
+      .eq('id', orgActualId)
+      .single();
+    featuresActuales = orgObj?.features || { locales: false };
+  }
 
   aplicarRol();
-  aplicarFeatureLocales();
+  aplicarFeatureLocales(); // Muestra los locales si están activos
   onTipoChange();
   verificarVencimiento();
-  actualizarBarraMonotributo(); // Muestra rápido lo que haya en caché local
+  actualizarBarraMonotributo();
 
-  // 3. Disparar TODAS las consultas de datos al mismo tiempo en paralelo
   const promesas = [
     cargarMovimientosSupabase(),
     cargarCierresSupabase(),
@@ -2519,10 +2537,17 @@ async function mostrarApp(perfilPreCargado = null) {
     cargarProductos()
   ];
 
-  if (featuresActuales.locales) promesas.push(cargarLocales());
-  if (rolActual === 'admin') promesas.push(cargarEmpleados());
+  if (featuresActuales.locales) {
+    promesas.push(cargarLocales());
+  }
+  if (rolActual === 'admin') {
+    promesas.push(cargarEmpleados());
+  }
 
   await Promise.all(promesas);
+
+  // Re-aplicar por si los locales terminaron de cargar
+  aplicarFeatureLocales();
 }
 
 function mostrarModalOnboarding(user) {
