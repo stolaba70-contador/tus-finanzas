@@ -30,7 +30,7 @@ body {
   position: relative;
 }
 
-/* ── HEADER ── */
+/* ── HEADER ── */ 
 .app-header {
   background: var(--dark);
   padding: 12px 16px 10px;

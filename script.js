@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ══ ESTADO ══
+// ══ ESTADO ══ . 
 let usuarioActual = null;
 let rolActual = null;
 let planActual = 'free';
