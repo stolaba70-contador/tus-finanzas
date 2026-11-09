@@ -517,6 +517,12 @@ let catIngresos = [];
 let catEgresos = [];
 let mediosPago = [];
 
+const LIMITES_MONOTRIBUTO = {
+  'A': 10277988.13, 'B': 15058447.71, 'C': 21113696.52, 'D': 26212853.42,
+  'E': 30833964.37, 'F': 38642048.36, 'G': 46211109.37, 'H': 70113407.33,
+  'I': 78479211.62, 'J': 89872640.30, 'K': 108357084.05
+};
+
 load();
 
 function irA(pantalla, el) {
@@ -1314,12 +1320,102 @@ function addCajaSalida() {
 
 function removeCajaSalida(idx) { const el = document.getElementById('caja-salida-' + idx); if (el) { el.remove(); calcularCierre(); } }
 
+function cargarMovimientosEfectivoEnCaja() {
+  const inputFecha = document.getElementById('caja-fecha').value;
+  if (!inputFecha) return;
+
+  let fechaBusqueda = inputFecha;
+  if (inputFecha.includes('/')) {
+    const [d, m, a] = inputFecha.split('/');
+    fechaBusqueda = `${a}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+
+  const movsEfectivo = movimientos.filter(m => {
+    const coincideFecha = m.fecha === fechaBusqueda || m.fecha === inputFecha;
+    const medioUpper = (m.medio || '').toUpperCase();
+    const esEfectivo = medioUpper === 'EFECTIVO' || !m.medio;
+    return coincideFecha && esEfectivo;
+  });
+
+  const ingRowsCont = document.getElementById('caja-ingresos-rows');
+  const salRowsCont = document.getElementById('caja-salidas-rows');
+
+  const ingresosExistentes = getIngresosRows().map(r => r.nombre.trim());
+  const salidasExistentes = getSalidasRows().map(r => r.nombre.trim());
+
+  const ingresosEfectivo = movsEfectivo.filter(m => m.tipo === 'ingreso');
+  const egresosEfectivo = movsEfectivo.filter(m => m.tipo === 'egreso');
+
+  ingresosEfectivo.forEach(m => {
+    const concepto = m.detalle || m.categoria || 'Venta en efectivo';
+    if (!ingresosExistentes.includes(concepto)) {
+      const idx = cajaIngresosCount++;
+      const div = document.createElement('div');
+      div.className = 'presup-row'; 
+      div.id = 'caja-ingreso-' + idx;
+      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(${idx})">✕</button>`;
+      ingRowsCont.appendChild(div);
+    }
+  });
+
+  egresosEfectivo.forEach(m => {
+    const concepto = m.detalle || m.categoria || 'Egreso en efectivo';
+    if (!salidasExistentes.includes(concepto)) {
+      const idx = cajaSalidasCount++;
+      const div = document.createElement('div');
+      div.className = 'presup-row'; 
+      div.id = 'caja-salida-' + idx;
+      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(${idx})">✕</button>`;
+      salRowsCont.appendChild(div);
+    }
+  });
+
+  calcularCierre();
+  showToast('🔄 Movimientos en efectivo cargados');
+}
+  const ingRowsCont = document.getElementById('caja-ingresos-rows');
+  const salRowsCont = document.getElementById('caja-salidas-rows');
+
+  const ingresosExistentes = getIngresosRows().map(r => r.nombre.trim());
+  const salidasExistentes = getSalidasRows().map(r => r.nombre.trim());
+
+  const ingresosEfectivo = movsEfectivo.filter(m => m.tipo === 'ingreso');
+  const egresosEfectivo = movsEfectivo.filter(m => m.tipo === 'egreso');
+
+  ingresosEfectivo.forEach(m => {
+    const concepto = m.detalle || m.categoria || 'Venta en efectivo';
+    if (!ingresosExistentes.includes(concepto)) {
+      const idx = cajaIngresosCount++;
+      const div = document.createElement('div');
+      div.className = 'presup-row'; 
+      div.id = 'caja-ingreso-' + idx;
+      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(${idx})">✕</button>`;
+      ingRowsCont.appendChild(div);
+    }
+  });
+
+  egresosEfectivo.forEach(m => {
+    const concepto = m.detalle || m.categoria || 'Egreso en efectivo';
+    if (!salidasExistentes.includes(concepto)) {
+      const idx = cajaSalidasCount++;
+      const div = document.createElement('div');
+      div.className = 'presup-row'; 
+      div.id = 'caja-salida-' + idx;
+      div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(${idx})">✕</button>`;
+      salRowsCont.appendChild(div);
+    }
+  });
+
+  calcularCierre();
+  showToast('🔄 Movimientos en efectivo cargados');
+
 function resetCajaForm() {
   document.getElementById('caja-inicio').value = '';
   document.getElementById('caja-ingresos-rows').innerHTML = `<div class="presup-row" id="caja-ingreso-0"><input class="presup-input-name" placeholder="Ej: Ventas, Cobros..." oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" placeholder="0" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(0)">✕</button></div>`;
   document.getElementById('caja-salidas-rows').innerHTML = `<div class="presup-row" id="caja-salida-0"><input class="presup-input-name" placeholder="Ej: Pago proveedor, Retiro..." oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" placeholder="0" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(0)">✕</button></div>`;
   cajaSalidasCount = 1; cajaIngresosCount = 1;
   calcularCierre(); document.getElementById('caja-fecha').valueAsDate = new Date();
+  cargarMovimientosEfectivoEnCaja();
 }
 
 async function guardarCierre() {
@@ -1641,6 +1737,7 @@ window.removeCajaSalida = removeCajaSalida;
 window.guardarCierre = guardarCierre;
 window.editarCierre = editarCierre;
 window.cerrarDefinitivo = cerrarDefinitivo;
+window.cargarMovimientosEfectivoEnCaja = cargarMovimientosEfectivoEnCaja;
 window.exportarCajaExcel = exportarCajaExcel;
 window.exportarCajaPDF = exportarCajaPDF;
 window.actualizarBarraMonotributo = actualizarBarraMonotributo;
@@ -1706,12 +1803,6 @@ if (temaGuardado === 'oscuro') {
     await verificarOnboarding(usuarioActual);
   }
 })();
-
-const LIMITES_MONOTRIBUTO = {
-  'A': 10277988.13, 'B': 15058447.71, 'C': 21113696.52, 'D': 26212853.42,
-  'E': 30833964.37, 'F': 38642048.36, 'G': 46211109.37, 'H': 70113407.33,
-  'I': 78479211.62, 'J': 89872640.30, 'K': 108357084.05
-};
 
 function actualizarBarraMonotributo() {
   const categoria = document.getElementById('mono-categoria').value;
