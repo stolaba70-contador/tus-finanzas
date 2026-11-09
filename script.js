@@ -1334,7 +1334,7 @@ function cargarMovimientosEfectivoEnCaja() {
 
   const movsEfectivo = movimientos.filter(m => {
     const coincideFecha = m.fecha === fechaBusqueda || m.fecha === inputFecha;
-    const medioUpper = (m.medio || '').toUpperCase();
+    const medioUpper = (m.medio || '').toUpperCase().trim();
     const esEfectivo = medioUpper === 'EFECTIVO' || !m.medio;
     return coincideFecha && esEfectivo;
   });
@@ -1342,35 +1342,61 @@ function cargarMovimientosEfectivoEnCaja() {
   const ingRowsCont = document.getElementById('caja-ingresos-rows');
   const salRowsCont = document.getElementById('caja-salidas-rows');
 
-  const ingresosExistentes = getIngresosRows().map(r => r.nombre.trim());
-  const salidasExistentes = getSalidasRows().map(r => r.nombre.trim());
+  // Si la primera fila por defecto está vacía (monto 0 y sin nombre), la limpiamos para que no estorbe
+  ingRowsCont.querySelectorAll('.presup-row').forEach(row => {
+    const nom = row.querySelector('.presup-input-name')?.value.trim();
+    const mon = parseFloat(row.querySelector('.presup-input-monto')?.value) || 0;
+    if (!nom && mon === 0) row.remove();
+  });
+
+  salRowsCont.querySelectorAll('.presup-row').forEach(row => {
+    const nom = row.querySelector('.presup-input-name')?.value.trim();
+    const mon = parseFloat(row.querySelector('.presup-input-monto')?.value) || 0;
+    if (!nom && mon === 0) row.remove();
+  });
+
+  // Guardamos los IDs de movimientos que ya fueron sincronizados en la pantalla
+  const idsYaCargados = new Set(
+    [...document.querySelectorAll('#screen-caja .presup-row[data-mov-id]')]
+      .map(row => row.getAttribute('data-mov-id'))
+  );
 
   const ingresosEfectivo = movsEfectivo.filter(m => m.tipo === 'ingreso');
   const egresosEfectivo = movsEfectivo.filter(m => m.tipo === 'egreso');
 
   ingresosEfectivo.forEach(m => {
-    const concepto = m.detalle || m.categoria || 'Venta en efectivo';
-    if (!ingresosExistentes.includes(concepto)) {
+    const movKey = String(m.id || `${m.fecha}-${m.monto}-${m.detalle}`);
+    if (!idsYaCargados.has(movKey)) {
+      const concepto = m.detalle || m.categoria || 'Venta en efectivo';
       const idx = cajaIngresosCount++;
       const div = document.createElement('div');
-      div.className = 'presup-row'; 
+      div.className = 'presup-row';
       div.id = 'caja-ingreso-' + idx;
+      div.setAttribute('data-mov-id', movKey);
       div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto ing-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" style="background:var(--green-light);color:var(--green);" onclick="removeCajaIngreso(${idx})">✕</button>`;
       ingRowsCont.appendChild(div);
+      idsYaCargados.add(movKey);
     }
   });
 
   egresosEfectivo.forEach(m => {
-    const concepto = m.detalle || m.categoria || 'Egreso en efectivo';
-    if (!salidasExistentes.includes(concepto)) {
+    const movKey = String(m.id || `${m.fecha}-${m.monto}-${m.detalle}`);
+    if (!idsYaCargados.has(movKey)) {
+      const concepto = m.detalle || m.categoria || 'Egreso en efectivo';
       const idx = cajaSalidasCount++;
       const div = document.createElement('div');
-      div.className = 'presup-row'; 
+      div.className = 'presup-row';
       div.id = 'caja-salida-' + idx;
+      div.setAttribute('data-mov-id', movKey);
       div.innerHTML = `<input class="presup-input-name" value="${concepto}" oninput="calcularCierre()"><input class="presup-input-monto egr-monto" type="number" value="${m.monto}" min="0" oninput="calcularCierre()"><button class="btn-remove-row" onclick="removeCajaSalida(${idx})">✕</button>`;
       salRowsCont.appendChild(div);
+      idsYaCargados.add(movKey);
     }
   });
+
+  // Si no había ningún ingreso o salida, dejamos al menos un renglón vacío para carga manual
+  if (ingRowsCont.children.length === 0) addCajaIngreso();
+  if (salRowsCont.children.length === 0) addCajaSalida();
 
   calcularCierre();
   showToast('🔄 Movimientos en efectivo cargados');
