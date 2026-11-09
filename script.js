@@ -132,23 +132,25 @@ function renderLocalesConfig() {
 }
 
 async function cargarEmpleados() {
-  const { data: perfil } = await supabaseClient
-    .from('perfiles').select('organizacion_id').eq('id', usuarioActual.id).single();
-  const org = perfil?.organizacion_id;
+  if (!orgActualId) return;
 
-  const { data } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from('perfiles')
     .select('id, nombre, email, rol, activo')
-    .eq('organizacion_id', org)
+    .eq('organizacion_id', orgActualId)
     .eq('activo', true)
     .neq('id', usuarioActual.id)
     .order('nombre');
 
-  // Cargar locales de cada empleado
+  if (error) {
+    console.error('Error cargando empleados:', error);
+    return;
+  }
+
   const { data: empLocales } = await supabaseClient
     .from('empleado_locales')
     .select('perfil_id, local_id')
-    .eq('organizacion_id', org);
+    .eq('organizacion_id', orgActualId);
 
   empleados = (data || []).map(e => ({
     ...e,

@@ -40,25 +40,55 @@ exports.handler = async function(event) {
         {
           method: 'POST',
           headers,
-          body: JSON.stringify({ email, password, email_confirm: true })
+          body: JSON.stringify({ 
+            email, 
+            password, 
+            email_confirm: true,
+            user_metadata: { nombre }
+          })
         }
       );
       const authData = await authRes.json();
-      if (authData.error || !authData.id) {
-        return { statusCode: 400, body: JSON.stringify({ error: authData.error || authData.msg || 'Error al crear usuario' }) };
+      if (!authRes.ok || authData.error || !authData.id) {
+        return { 
+          statusCode: 400, 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: authData.msg || authData.error_description || authData.error || 'Error al crear usuario en Auth' }) 
+        };
       }
 
       const nuevoId = authData.id;
 
-      // Crear perfil
-      await fetch(
+      // Crear o actualizar perfil (Upsert por si existe un trigger en auth.users)
+      const perfilInsertRes = await fetch(
         `${process.env.SUPABASE_URL}/rest/v1/perfiles`,
         {
           method: 'POST',
-          headers: { ...headers, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ id: nuevoId, organizacion_id: orgId, rol: rol || 'empleado', nombre, email })
+          headers: { 
+            ...headers, 
+            'Prefer': 'resolution=merge-duplicates,return=minimal' 
+          },
+          body: JSON.stringify({ 
+            id: nuevoId, 
+            organizacion_id: orgId, 
+            rol: rol || 'empleado', 
+            nombre, 
+            email,
+            activo: true,
+            onboarding_completado: true,
+            modo_activo: 'negocio'
+          })
         }
       );
+
+      if (!perfilInsertRes.ok) {
+        const errPerfil = await perfilInsertRes.text();
+        return { 
+          statusCode: 400, 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Error al guardar perfil: ' + errPerfil }) 
+        };
+      }
 
       // Asignar locales
       if (locales && locales.length > 0) {
@@ -77,7 +107,11 @@ exports.handler = async function(event) {
         );
       }
 
-      return { statusCode: 200, body: JSON.stringify({ ok: true, id: nuevoId }) };
+      return { 
+        statusCode: 200, 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: true, id: nuevoId }) 
+      };
     }
 
     // ── ACTUALIZAR EMPLEADO ──
