@@ -4,18 +4,9 @@ const SUPABASE_KEY = 'sb_publishable_HrCnN_0l6NjjIy_4z6jMJg_CiCCKXCg';
 const { createClient } = supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Restaurar sesión al recargar la página
-document.addEventListener('DOMContentLoaded', () => {
-  supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'INITIAL_SESSION' && session?.user && !usuarioActual) {
-      usuarioActual = session.user;
-      await mostrarApp();
-    }
-  });
-});
-
-// ══ ESTADO ══ . 
+// ══ ESTADO ══
 let usuarioActual = null;
+let orgActualId = null;
 let rolActual = null;
 let planActual = 'free';
 let tipoGrafico = 'ingreso';
@@ -1835,16 +1826,11 @@ actualizarBarraMonotributo();
 
 
 async function cargarProductos() {
-  const { data: perfil } = await supabaseClient
-    .from('perfiles')
-    .select('organizacion_id')
-    .eq('id', usuarioActual.id)
-    .single();
-
+  if (!orgActualId) return;
   const { data } = await supabaseClient
     .from('productos')
     .select('*')
-    .eq('organizacion_id', perfil.organizacion_id)
+    .eq('organizacion_id', orgActualId)
     .eq('activo', true)
     .order('nombre');
 
@@ -2217,15 +2203,11 @@ function limpiarFiltrosProductos() {
 }
 
 async function cargarCategorias() {
-  const { data: perfil } = await supabaseClient
-    .from('perfiles').select('organizacion_id').eq('id', usuarioActual.id).single();
-  const org = perfil?.organizacion_id;
-  if (!org) return;
-
+  if (!orgActualId) return;
   const [resIng, resEgr, resMed] = await Promise.all([
-    supabaseClient.from('categorias_ingresos').select('nombre').eq('organizacion_id', org).order('orden'),
-    supabaseClient.from('categorias_egresos').select('nombre').eq('organizacion_id', org).order('orden'),
-    supabaseClient.from('medios_pago').select('nombre').eq('organizacion_id', org).order('orden')
+    supabaseClient.from('categorias_ingresos').select('nombre').eq('organizacion_id', orgActualId).order('orden'),
+    supabaseClient.from('categorias_egresos').select('nombre').eq('organizacion_id', orgActualId).order('orden'),
+    supabaseClient.from('medios_pago').select('nombre').eq('organizacion_id', orgActualId).order('orden')
   ]);
 
   catIngresos = (resIng.data || []).map(c => c.nombre);
@@ -2239,16 +2221,11 @@ async function cargarCategorias() {
 // ══ CATEGORÍAS DE PRODUCTOS ══
 
 async function cargarCategoriasProductos() {
-  const { data: perfil } = await supabaseClient
-    .from('perfiles')
-    .select('organizacion_id')
-    .eq('id', usuarioActual.id)
-    .single();
-
+  if (!orgActualId) return;
   const { data } = await supabaseClient
     .from('categorias_productos')
     .select('*')
-    .eq('organizacion_id', perfil.organizacion_id)
+    .eq('organizacion_id', orgActualId)
     .order('orden');
 
   categoriasProductos = data || [];
@@ -2505,39 +2482,77 @@ async function verificarOnboarding(user) {
     .eq('id', user.id)
     .single();
 
-  if (error) {
+  if (error || !perfil) {
     console.error('Error al obtener perfil:', error);
     return;
   }
 
-  // 1. Verificar si la cuenta está aprobada por vos en Supabase
   if (perfil.activo === false) {
     document.getElementById('login-screen').style.display = 'none';
-    
-    // Ocultar elementos principales de la app por seguridad visual
     const appHeader = document.querySelector('.app-header');
     if (appHeader) appHeader.style.display = 'none';
     const bottomNav = document.querySelector('.bottom-nav');
     if (bottomNav) bottomNav.style.display = 'none';
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-
     document.getElementById('pendiente-modal').classList.remove('hidden');
     return;
   }
 
-  // Si está activo, asegurarse de ocultar el cartel de pendiente
   const modalPendiente = document.getElementById('pendiente-modal');
   if (modalPendiente) modalPendiente.classList.add('hidden');
 
-  // 2. Si está aprobada pero no completó el onboarding, mostrar el selector Personal / Negocio
   if (!perfil.onboarding_completado && !perfil.organizacion_id) {
     document.getElementById('login-screen').style.display = 'none';
     mostrarModalOnboarding(user);
   } else {
-    // 3. Si está aprobada y ya eligió su modo, entrar directo a la app
-    mostrarApp();
     cargarInterfaz(perfil);
+    await mostrarApp(perfil); // <-- Le pasamos el perfil que ya trajimos
   }
+}
+
+async function mostrarApp(perfilPreCargado = null) {
+  // 1. Ocultar el login AL INSTANTE sin esperar a las tablas
+  const loginEl = document.getElementById('login-screen');
+  loginEl.style.display = 'none';
+
+  const emailCorto = usuarioActual.email.split('@')[0];
+  document.getElementById('header-user-email').textContent = emailCorto;
+  document.getElementById('caja-cajero').value = emailCorto;
+
+  // 2. Reutilizar el perfil que ya trajo verificarOnboarding (ahorra otra consulta)
+  let perfil = perfilPreCargado;
+  if (!perfil) {
+    const { data } = await supabaseClient
+      .from('perfiles')
+      .select('*, organizaciones(*)')
+      .eq('id', usuarioActual.id)
+      .single();
+    perfil = data;
+  }
+
+  rolActual = perfil?.rol || 'empleado';
+  orgActualId = perfil?.organizacion_id || null;
+  featuresActuales = perfil?.organizaciones?.features || { locales: false };
+
+  aplicarRol();
+  aplicarFeatureLocales();
+  onTipoChange();
+  verificarVencimiento();
+  actualizarBarraMonotributo(); // Muestra rápido lo que haya en caché local
+
+  // 3. Disparar TODAS las consultas de datos al mismo tiempo en paralelo
+  const promesas = [
+    cargarMovimientosSupabase(),
+    cargarCierresSupabase(),
+    cargarCategorias(),
+    cargarCategoriasProductos(),
+    cargarProductos()
+  ];
+
+  if (featuresActuales.locales) promesas.push(cargarLocales());
+  if (rolActual === 'admin') promesas.push(cargarEmpleados());
+
+  await Promise.all(promesas);
 }
 
 function mostrarModalOnboarding(user) {
