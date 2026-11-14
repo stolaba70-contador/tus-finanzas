@@ -6,25 +6,46 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// Firma el Ticket de Requerimiento de Acceso (TRA) en formato CMS/PKCS#7 exigido por WSAA de ARCA
+function normalizarPem(valor) {
+  if (!valor || typeof valor !== 'string') return '';
+  return valor
+    .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim() + '\n';
+}
+
+function decodificarXml(texto) {
+  return String(texto || '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
 function firmarTRA(certPem, keyPem) {
+  const certLimpio = normalizarPem(certPem);
+  const keyLimpia = normalizarPem(keyPem);
+
+  const cert = forge.pki.certificateFromPem(certLimpio);
+  const privateKey = forge.pki.privateKeyFromPem(keyLimpia);
+
   const ahora = new Date();
-  const genTime = new Date(ahora.getTime() - 600000).toISOString();
-  const expTime = new Date(ahora.getTime() + 600000).toISOString();
+  const genTime = new Date(ahora.getTime() - 10 * 60 * 1000).toISOString();
+  const expTime = new Date(ahora.getTime() + 10 * 60 * 1000).toISOString();
   const uniqueId = Math.floor(ahora.getTime() / 1000);
 
-  const traXml = `<?xml version="1.0" encoding="UTF-8"?>
-<loginTicketRequest version="1.0">
-  <header>
-    <uniqueId>${uniqueId}</uniqueId>
-    <generationTime>${genTime}</generationTime>
-    <expirationTime>${expTime}</expirationTime>
-  </header>
-  <service>wsfe</service>
-</loginTicketRequest>`;
-
-  const cert = forge.pki.certificateFromPem(certPem);
-  const privateKey = forge.pki.privateKeyFromPem(keyPem);
+  const traXml =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<loginTicketRequest version="1.0">` +
+    `<header>` +
+    `<uniqueId>${uniqueId}</uniqueId>` +
+    `<generationTime>${genTime}</generationTime>` +
+    `<expirationTime>${expTime}</expirationTime>` +
+    `</header>` +
+    `<service>wsfe</service>` +
+    `</loginTicketRequest>`;
 
   const p7 = forge.pkcs7.createSignedData();
   p7.content = forge.util.createBuffer(traXml, 'utf8');
@@ -40,48 +61,85 @@ function firmarTRA(certPem, keyPem) {
     ]
   });
   p7.sign();
-  const asn1 = p7.toAsn1();
-  const der = forge.asn1.toDer(asn1).getBytes();
+
+  const der = forge.asn1.toDer(p7.toAsn1()).getBytes();
   return forge.util.encode64(der);
 }
 
-// Obtiene Token y Sign desde el servidor de Producción de ARCA (WSAA)
 async function obtenerTokenYSigArca(certPem, keyPem) {
   const cmsBase64 = firmarTRA(certPem, keyPem);
-  const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov">
-  <soapenv:Header/>
-  <soapenv:Body>
-    <wsaa:loginCms>
-      <wsaa:in0>${cmsBase64}</wsaa:in0>
-    </wsaa:loginCms>
-  </soapenv:Body>
-</soapenv:Envelope>`;
+
+  const soapEnvelope =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov">` +
+    `<soapenv:Header/>` +
+    `<soapenv:Body>` +
+    `<wsaa:loginCms>` +
+    `<wsaa:in0>${cmsBase64}</wsaa:in0>` +
+    `</wsaa:loginCms>` +
+    `</soapenv:Body>` +
+    `</soapenv:Envelope>`;
 
   const res = await fetch('https://wsaa.afip.gov.ar/ws/services/LoginCms', {
     method: 'POST',
-    headers: { 'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': '' },
-    body: soapEnvelope
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'SOAPAction': '""'
+    },
+    body: soapEnvelope,
+    signal: AbortSignal.timeout(8000)
   });
 
-  const xmlText = await res.text();
-  const tokenMatch = xmlText.match(/&lt;token&gt;([\s\S]*?)&lt;\/token&gt;/) || xmlText.match(/<token>([\s\S]*?)<\/token>/);
-  const signMatch = xmlText.match(/&lt;sign&gt;([\s\S]*?)&lt;\/sign&gt;/) || xmlText.match(/<sign>([\s\S]*?)<\/sign>/);
+  const rawText = await res.text();
+  const xmlText = decodificarXml(rawText);
 
-  if (!tokenMatch || !signMatch) {
-    throw new Error('ARCA rechazó el certificado o aún no fue asociado al WebService wsfe. Respuesta: ' + xmlText.slice(0, 300));
+  const faultMatch = xmlText.match(/<faultstring>([\s\S]*?)<\/faultstring>/i);
+  if (faultMatch) {
+    throw new Error(`WSAA Fault: ${faultMatch[1].trim()}`);
   }
 
-  return { token: tokenMatch[1].trim(), sign: signMatch[1].trim() };
+  const tokenMatch = xmlText.match(/<token>([\s\S]*?)<\/token>/i);
+  const signMatch = xmlText.match(/<sign>([\s\S]*?)<\/sign>/i);
+
+  if (!tokenMatch || !signMatch) {
+    throw new Error(`WSAA sin token/sign (HTTP ${res.status}): ${xmlText.slice(0, 240)}`);
+  }
+
+  return {
+    token: tokenMatch[1].trim(),
+    sign: signMatch[1].trim()
+  };
 }
 
 exports.handler = async (event) => {
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Método no permitido' }) };
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ ok: false, error: 'Método no permitido' })
+    };
   }
 
   try {
-    const { organizacionId, montoTotal, docTipo, docNro } = JSON.parse(event.body);
+    const body = event.body ? JSON.parse(event.body) : {};
+    const { organizacionId, montoTotal, docTipo, docNro } = body;
+
+    if (!organizacionId || !montoTotal || Number(montoTotal) <= 0) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ ok: false, error: 'Faltan datos de organización o monto de venta' })
+      };
+    }
 
     const { data: org, error: orgError } = await supabase
       .from('organizaciones')
@@ -92,32 +150,35 @@ exports.handler = async (event) => {
     if (orgError || !org || !org.cuit || !org.afip_cert || !org.afip_key) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: 'Falta vincular tu CUIT, Certificado (.crt) y Clave (.key) en la pestaña Config.' })
+        headers,
+        body: JSON.stringify({
+          ok: false,
+          error: 'Falta vincular CUIT, certificado (.crt) o clave privada (.key) en Config'
+        })
       };
     }
 
     const cuit = String(org.cuit).replace(/\D/g, '');
-    const ptoVta = Number(org.punto_venta) || 1;
+    const ptoVta = Number(org.punto_venta) || 3;
     const cbteTipo = 11; // 11 = Factura C
 
-    // 1. Autenticar en WSAA de ARCA
     const { token, sign } = await obtenerTokenYSigArca(org.afip_cert, org.afip_key);
 
-    // 2. Consultar último comprobante autorizado en WSFEv1 de ARCA
-    const soapUltimo = `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Body>
-    <FECompUltimoAutorizado xmlns="http://ar.gov.afip.dif.FEV1/">
-      <Auth>
-        <Token>${token}</Token>
-        <Sign>${sign}</Sign>
-        <Cuit>${cuit}</Cuit>
-      </Auth>
-      <PtoVta>${ptoVta}</PtoVta>
-      <CbteTipo>${cbteTipo}</CbteTipo>
-    </FECompUltimoAutorizado>
-  </soap:Body>
-</soap:Envelope>`;
+    const soapUltimo =
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
+      `<soap:Body>` +
+      `<FECompUltimoAutorizado xmlns="http://ar.gov.afip.dif.FEV1/">` +
+      `<Auth>` +
+      `<Token>${token}</Token>` +
+      `<Sign>${sign}</Sign>` +
+      `<Cuit>${cuit}</Cuit>` +
+      `</Auth>` +
+      `<PtoVta>${ptoVta}</PtoVta>` +
+      `<CbteTipo>${cbteTipo}</CbteTipo>` +
+      `</FECompUltimoAutorizado>` +
+      `</soap:Body>` +
+      `</soap:Envelope>`;
 
     const resUltimo = await fetch('https://servicios1.afip.gov.ar/wsfev1/service.asmx', {
       method: 'POST',
@@ -125,60 +186,75 @@ exports.handler = async (event) => {
         'Content-Type': 'text/xml; charset=utf-8',
         'SOAPAction': 'http://ar.gov.afip.dif.FEV1/FECompUltimoAutorizado'
       },
-      body: soapUltimo
+      body: soapUltimo,
+      signal: AbortSignal.timeout(8000)
     });
 
-    const xmlUltimo = await resUltimo.text();
-    const ultimoMatch = xmlUltimo.match(/<CbteNro>(\d+)<\/CbteNro>/);
+    const xmlUltimo = decodificarXml(await resUltimo.text());
+    const faultUltimo = xmlUltimo.match(/<faultstring>([\s\S]*?)<\/faultstring>/i);
+    if (faultUltimo) {
+      throw new Error(`WSFE UltimoComprobante: ${faultUltimo[1].trim()}`);
+    }
+
+    const errUltimo = xmlUltimo.match(/<Err>[\s\S]*?<Code>(\d+)<\/Code>[\s\S]*?<Msg>([\s\S]*?)<\/Msg>[\s\S]*?<\/Err>/i);
+    if (errUltimo) {
+      throw new Error(`ARCA ${errUltimo[1]}: ${errUltimo[2].trim()}`);
+    }
+
+    const ultimoMatch = xmlUltimo.match(/<CbteNro>(\d+)<\/CbteNro>/i);
     const ultimoNro = ultimoMatch ? parseInt(ultimoMatch[1], 10) : 0;
     const nuevoNumero = ultimoNro + 1;
 
-    // 3. Emitir Factura C y solicitar CAE en WSFEv1
-    const fechaHoy = new Date(Date.now() - (new Date().getTimezoneOffset() * 60000))
-      .toISOString().split('T')[0].replace(/-/g, '');
+    const fechaHoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+      .toISOString()
+      .split('T')[0]
+      .replace(/-/g, '');
+
     const tipoDocumento = Number(docTipo) || 99;
-    const nroDocumento = tipoDocumento === 99 ? 0 : Number(docNro || 0);
-    const condicionIvaReceptor = tipoDocumento === 80 ? 6 : 5; // RG 5616: 5 = Consumidor Final, 6 = Monotributo
+    const nroDocumento = tipoDocumento === 99 ? 0 : Number(String(docNro || '0').replace(/\D/g, ''));
+    const condicionIvaReceptor = tipoDocumento === 80 ? 6 : 5;
     const importeFormateado = Number(montoTotal).toFixed(2);
 
-    const soapSolicitar = `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Body>
-    <FECAESolicitar xmlns="http://ar.gov.afip.dif.FEV1/">
-      <Auth>
-        <Token>${token}</Token>
-        <Sign>${sign}</Sign>
-        <Cuit>${cuit}</Cuit>
-      </Auth>
-      <FeCAEReq>
-        <FeCabReq>
-          <CantReg>1</CantReg>
-          <PtoVta>${ptoVta}</PtoVta>
-          <CbteTipo>${cbteTipo}</CbteTipo>
-        </FeCabReq>
-        <FeDetReq>
-          <FECAEDetRequest>
-            <Concepto>1</Concepto>
-            <DocTipo>${tipoDocumento}</DocTipo>
-            <DocNro>${nroDocumento}</DocNro>
-            <CbteDesde>${nuevoNumero}</CbteDesde>
-            <CbteHasta>${nuevoNumero}</CbteHasta>
-            <CbteFch>${fechaHoy}</CbteFch>
-            <ImpTotal>${importeFormateado}</ImpTotal>
-            <ImpTotConc>0.00</ImpTotConc>
-            <ImpNeto>${importeFormateado}</ImpNeto>
-            <ImpOpEx>0.00</ImpOpEx>
-            <ImpTrib>0.00</ImpTrib>
-            <ImpIVA>0.00</ImpIVA>
-            <MonId>PES</MonId>
-            <MonCotiz>1</MonCotiz>
-            <CondicionIVAReceptorId>${condicionIvaReceptor}</CondicionIVAReceptorId>
-          </FECAEDetRequest>
-        </FeDetReq>
-      </FeCAEReq>
-    </FECAESolicitar>
-  </soap:Body>
-</soap:Envelope>`;
+    // Orden estricto de elementos XSD en FECAEDetRequest
+    const soapSolicitar =
+      `<?xml version="1.0" encoding="utf-8"?>` +
+      `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">` +
+      `<soap:Body>` +
+      `<FECAESolicitar xmlns="http://ar.gov.afip.dif.FEV1/">` +
+      `<Auth>` +
+      `<Token>${token}</Token>` +
+      `<Sign>${sign}</Sign>` +
+      `<Cuit>${cuit}</Cuit>` +
+      `</Auth>` +
+      `<FeCAEReq>` +
+      `<FeCabReq>` +
+      `<CantReg>1</CantReg>` +
+      `<PtoVta>${ptoVta}</PtoVta>` +
+      `<CbteTipo>${cbteTipo}</CbteTipo>` +
+      `</FeCabReq>` +
+      `<FeDetReq>` +
+      `<FECAEDetRequest>` +
+      `<Concepto>1</Concepto>` +
+      `<DocTipo>${tipoDocumento}</DocTipo>` +
+      `<DocNro>${nroDocumento}</DocNro>` +
+      `<CbteDesde>${nuevoNumero}</CbteDesde>` +
+      `<CbteHasta>${nuevoNumero}</CbteHasta>` +
+      `<CbteFch>${fechaHoy}</CbteFch>` +
+      `<ImpTotal>${importeFormateado}</ImpTotal>` +
+      `<ImpTotConc>0.00</ImpTotConc>` +
+      `<ImpNeto>${importeFormateado}</ImpNeto>` +
+      `<ImpOpEx>0.00</ImpOpEx>` +
+      `<ImpTrib>0.00</ImpTrib>` +
+      `<ImpIVA>0.00</ImpIVA>` +
+      `<MonId>PES</MonId>` +
+      `<MonCotiz>1</MonCotiz>` +
+      `<CondicionIVAReceptorId>${condicionIvaReceptor}</CondicionIVAReceptorId>` +
+      `</FECAEDetRequest>` +
+      `</FeDetReq>` +
+      `</FeCAEReq>` +
+      `</FECAESolicitar>` +
+      `</soap:Body>` +
+      `</soap:Envelope>`;
 
     const resSolicitar = await fetch('https://servicios1.afip.gov.ar/wsfev1/service.asmx', {
       method: 'POST',
@@ -186,23 +262,38 @@ exports.handler = async (event) => {
         'Content-Type': 'text/xml; charset=utf-8',
         'SOAPAction': 'http://ar.gov.afip.dif.FEV1/FECAESolicitar'
       },
-      body: soapSolicitar
+      body: soapSolicitar,
+      signal: AbortSignal.timeout(8000)
     });
 
-    const xmlSolicitar = await resSolicitar.text();
-    const resultadoMatch = xmlSolicitar.match(/<Resultado>([A-Z])<\/Resultado>/);
-    const caeMatch = xmlSolicitar.match(/<CAE>(\d+)<\/CAE>/);
-    const vtoMatch = xmlSolicitar.match(/<CAEFchVto>(\d+)<\/CAEFchVto>/);
+    const xmlSolicitar = decodificarXml(await resSolicitar.text());
+    const faultSolicitar = xmlSolicitar.match(/<faultstring>([\s\S]*?)<\/faultstring>/i);
+    if (faultSolicitar) {
+      throw new Error(`WSFE FECAESolicitar: ${faultSolicitar[1].trim()}`);
+    }
 
-    if (!caeMatch || (resultadoMatch && resultadoMatch[1] !== 'A')) {
-      const msgError = xmlSolicitar.match(/<Msg>([\s\S]*?)<\/Msg>/);
-      throw new Error(msgError ? msgError[1] : 'ARCA rechazó el comprobante.');
+    const errGlobal = xmlSolicitar.match(/<Err>[\s\S]*?<Code>(\d+)<\/Code>[\s\S]*?<Msg>([\s\S]*?)<\/Msg>[\s\S]*?<\/Err>/i);
+    if (errGlobal) {
+      throw new Error(`ARCA ${errGlobal[1]}: ${errGlobal[2].trim()}`);
+    }
+
+    const obsDet = xmlSolicitar.match(/<Obs>[\s\S]*?<Code>(\d+)<\/Code>[\s\S]*?<Msg>([\s\S]*?)<\/Msg>[\s\S]*?<\/Obs>/i);
+    const resultadoMatch = xmlSolicitar.match(/<Resultado>([A-Z])<\/Resultado>/i);
+    const caeMatch = xmlSolicitar.match(/<CAE>(\d+)<\/CAE>/i);
+    const vtoMatch = xmlSolicitar.match(/<CAEFchVto>(\d+)<\/CAEFchVto>/i);
+
+    if (!caeMatch || (resultadoMatch && resultadoMatch[1].toUpperCase() !== 'A')) {
+      const detalleRechazo = obsDet
+        ? `Obs ${obsDet[1]}: ${obsDet[2].trim()}`
+        : 'ARCA no devolvió CAE';
+      throw new Error(detalleRechazo);
     }
 
     const nroFormateado = `${String(ptoVta).padStart(5, '0')}-${String(nuevoNumero).padStart(8, '0')}`;
 
     return {
       statusCode: 200,
+      headers,
       body: JSON.stringify({
         ok: true,
         cae: caeMatch[1],
@@ -213,9 +304,15 @@ exports.handler = async (event) => {
         numero: nuevoNumero
       })
     };
-
   } catch (err) {
-    console.error('Error ARCA:', err);
-    return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+    console.error('Error en facturar-arca:', err);
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        ok: false,
+        error: err.message || 'Error inesperado al facturar en ARCA'
+      })
+    };
   }
 };
