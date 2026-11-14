@@ -496,7 +496,10 @@ function irA(pantalla, el) {
   if (pantalla === 'resumen') renderResumen();
   if (pantalla === 'reporte') renderReporte();
   if (pantalla === 'productos') cargarProductos();
-  if (pantalla === 'configuracion') cargarCategoriasProductos();
+  if (pantalla === 'configuracion') {
+    cargarCategoriasProductos();
+    cargarConfiguracionArca();
+  }
 }
 
 function showToast(msg) {
@@ -670,25 +673,64 @@ async function agregarMovimiento() {
     } else {
       if (itemsVenta.length === 0) { showToast('⚠️ Agregá al menos un producto'); return; }
 
+      const quiereFacturar = document.getElementById('mov-facturar-arca')?.checked;
+      const totalVenta = itemsVenta.reduce((s, it) => s + it.subtotal, 0);
+      let datosFacturaArca = null;
+
+      if (quiereFacturar) {
+        const docTipo = document.getElementById('arca-doc-tipo')?.value || '99';
+        const docNro = document.getElementById('arca-doc-nro')?.value.trim() || '0';
+        if (docTipo !== '99' && !docNro) {
+          showToast('⚠️ Ingresá el DNI o CUIT del cliente');
+          return;
+        }
+
+        showToast('🧾 Solicitando CAE a ARCA...');
+        const base = window.location.hostname === 'localhost' ? 'http://localhost:8888' : '';
+        const resArca = await fetch(`${base}/.netlify/functions/facturar-arca`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organizacionId: orgActualId,
+            montoTotal: totalVenta,
+            docTipo,
+            docNro
+          })
+        });
+
+        const dataArca = await resArca.json();
+        if (!resArca.ok || !dataArca.ok) {
+          showToast('❌ Error ARCA: ' + (dataArca.error || 'No se pudo obtener CAE'));
+          return;
+        }
+        datosFacturaArca = dataArca;
+      }
+
       const ventaId = crypto.randomUUID();
       showToast('Guardando venta...');
 
       let exitos = 0;
       for (const item of itemsVenta) {
+        const detalleConFactura = datosFacturaArca 
+          ? `${item.nombre} (Fact. C ${datosFacturaArca.nroComprobante})`
+          : (detalle ? `${item.nombre} - ${detalle}` : item.nombre);
+
         const movimiento = {
-        fecha,
-        tipo: 'ingreso',
-        monto: item.subtotal,
-        categoria: item.categoria,
-        medio,
-        detalle: detalle ? `${item.nombre} - ${detalle}` : item.nombre,
-        esProducto: !!item.productoId,
-        productoId: item.productoId,
-        cantidad: item.cantidad,
-        precioUnitario: item.precio,
-        ventaId,
-        localId: item.localId || null
-};
+          fecha,
+          tipo: 'ingreso',
+          monto: item.subtotal,
+          categoria: item.categoria,
+          medio,
+          detalle: detalleConFactura,
+          esProducto: !!item.productoId,
+          productoId: item.productoId,
+          cantidad: item.cantidad,
+          precioUnitario: item.precio,
+          ventaId,
+          localId: item.localId || null,
+          cae: datosFacturaArca?.cae || null,
+          nroComprobante: datosFacturaArca?.nroComprobante || null
+        };
         movimientos.unshift({ ...movimiento, usuario: usuarioActual.email.split('@')[0] || 'sin usuario', local_id: movimiento.localId || null });
         const ok = await guardarEnSupabase(movimiento);
         if (ok) exitos++;
@@ -696,10 +738,19 @@ async function agregarMovimiento() {
       }
 
       if (exitos === itemsVenta.length) {
-        showToast(`✅ Venta guardada (${exitos} items)`);
+        if (datosFacturaArca) {
+          showToast(`✅ Factura C ${datosFacturaArca.nroComprobante} emitida`);
+          imprimirTicketFacturaArca(datosFacturaArca, [...itemsVenta], totalVenta, fecha, medio);
+        } else {
+          showToast(`✅ Venta guardada (${exitos} items)`);
+        }
       } else {
         showToast(`⚠️ Se guardaron ${exitos} de ${itemsVenta.length} items`);
       }
+
+      // Resetear casilla de ARCA
+      const chkArca = document.getElementById('mov-facturar-arca');
+      if (chkArca) { chkArca.checked = false; toggleDatosClienteArca(); }
     }
 
     // Reset
@@ -2952,3 +3003,179 @@ window.imprimirEtiquetaProducto = imprimirEtiquetaProducto;
 window.verificarEnterEscaneoVenta = verificarEnterEscaneoVenta;
 window.abrirEscanerCamara = abrirEscanerCamara;
 window.cerrarEscanerCamara = cerrarEscanerCamara;
+
+// ══ FUNCIONES DE INTERFAZ Y TICKET ARCA ══
+
+function toggleDatosClienteArca() {
+  const checked = document.getElementById('mov-facturar-arca')?.checked;
+  const panel = document.getElementById('datos-cliente-arca');
+  if (panel) panel.style.display = checked ? 'block' : 'none';
+}
+
+function onDocTipoArcaChange() {
+  const tipo = document.getElementById('arca-doc-tipo')?.value;
+  const grupoNro = document.getElementById('grupo-arca-doc-nro');
+  if (grupoNro) grupoNro.style.display = (tipo === '99') ? 'none' : 'flex';
+}
+
+function imprimirTicketFacturaArca(factura, items, total, fecha, medio) {
+  // Armar JSON oficial exigido por ARCA para el código QR del comprobante
+  const qrData = {
+    ver: 1,
+    fecha: fecha,
+    cuit: Number(factura.cuitEmisor),
+    ptoVta: Number(factura.puntoVenta),
+    tipoCmp: 11,
+    nroCmp: Number(factura.numero),
+    importe: Number(total.toFixed(2)),
+    moneda: 'PES',
+    ctz: 1,
+    tipoCodAut: 'E',
+    codAut: Number(factura.cae)
+  };
+  const qrBase64 = btoa(JSON.stringify(qrData));
+  const urlAfipQr = `https://www.afip.gob.ar/fe/qr/?p=${qrBase64}`;
+  const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(urlAfipQr)}`;
+
+  const filasHtml = items.map(it => `
+    <tr>
+      <td style="padding:4px 0;">${it.cantidad} x ${it.nombre}</td>
+      <td style="padding:4px 0;text-align:right;font-weight:600;">$${Number(it.subtotal).toLocaleString('es-AR')}</td>
+    </tr>
+  `).join('');
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Factura C ${factura.nroComprobante}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Courier New', monospace; width: 300px; margin: 0 auto; padding: 14px; color: #000; font-size: 12px; }
+        .center { text-align: center; }
+        .letra-c { font-size: 24px; font-weight: bold; border: 2px solid #000; display: inline-block; padding: 2px 10px; margin: 6px 0; }
+        .divider { border-top: 1px dashed #000; margin: 8px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        .total { font-size: 16px; font-weight: bold; display: flex; justify-content: space-between; margin: 8px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="center">
+        <div class="letra-c">C</div>
+        <div style="font-size:10px;">COD. 011</div>
+        <div style="font-weight:bold;font-size:14px;margin-top:4px;">FACTURA</div>
+        <div>N° ${factura.nroComprobante}</div>
+        <div>CUIT: ${factura.cuitEmisor}</div>
+        <div>Fecha: ${fecha.split('-').reverse().join('/')}</div>
+      </div>
+      <div class="divider"></div>
+      <div>Receptor: Consumidor Final</div>
+      <div>Medio de pago: ${medio}</div>
+      <div class="divider"></div>
+      <table>${filasHtml}</table>
+      <div class="divider"></div>
+      <div class="total"><span>TOTAL:</span><span>$${Number(total).toLocaleString('es-AR')}</span></div>
+      <div class="divider"></div>
+      <div class="center" style="margin-top:10px;">
+        <img src="${qrImgUrl}" width="120" height="120" alt="QR ARCA" />
+        <div style="font-weight:bold;margin-top:6px;">CAE N°: ${factura.cae}</div>
+        <div>Vto. CAE: ${factura.vencimientoCae}</div>
+        <div style="font-size:10px;margin-top:4px;">Comprobante Autorizado - ARCA</div>
+      </div>
+    </body>
+    </html>
+  `);
+  win.document.close();
+  setTimeout(() => win.print(), 600);
+}
+
+window.toggleDatosClienteArca = toggleDatosClienteArca;
+window.onDocTipoArcaChange = onDocTipoArcaChange;
+
+function leerArchivoTextoArca(event, targetId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById(targetId).value = e.target.result.trim();
+    showToast('📄 Archivo leído correctamente');
+  };
+  reader.readAsText(file);
+}
+
+async function cargarConfiguracionArca() {
+  if (!orgActualId) return;
+  const { data: org, error } = await supabaseClient
+    .from('organizaciones')
+    .select('cuit, punto_venta, afip_cert, afip_key')
+    .eq('id', orgActualId)
+    .single();
+
+  if (error || !org) return;
+
+  const inputCuit = document.getElementById('arca-config-cuit');
+  const inputPto = document.getElementById('arca-config-ptovta');
+  const inputCert = document.getElementById('arca-config-cert');
+  const inputKey = document.getElementById('arca-config-key');
+  const estadoEl = document.getElementById('arca-estado-vinculacion');
+
+  if (inputCuit) inputCuit.value = org.cuit || '';
+  if (inputPto) inputPto.value = org.punto_venta || 3;
+  if (inputCert) inputCert.value = org.afip_cert || '';
+  if (inputKey) inputKey.value = org.afip_key || '';
+
+  if (estadoEl) {
+    if (org.cuit && org.afip_cert && org.afip_key) {
+      estadoEl.style.color = 'var(--green)';
+      estadoEl.textContent = `🟢 Vinculado en modo PRODUCCIÓN (CUIT ${org.cuit} · Pto. Vta. ${org.punto_venta || 3})`;
+    } else {
+      estadoEl.style.color = '#f59e0b';
+      estadoEl.textContent = '🟡 Sin certificados cargados aún';
+    }
+  }
+}
+
+async function guardarConfiguracionArca() {
+  if (!orgActualId) {
+    showToast('⚠️ No se encontró la organización activa');
+    return;
+  }
+
+  const cuit = document.getElementById('arca-config-cuit').value.trim().replace(/\D/g, '');
+  const puntoVenta = parseInt(document.getElementById('arca-config-ptovta').value, 10) || 3;
+  const cert = document.getElementById('arca-config-cert').value.trim();
+  const key = document.getElementById('arca-config-key').value.trim();
+
+  if (cuit.length !== 11) {
+    showToast('⚠️ El CUIT debe tener 11 dígitos sin guiones');
+    return;
+  }
+  if (!cert.includes('BEGIN CERTIFICATE') || !key.includes('PRIVATE KEY')) {
+    showToast('⚠️ Subí un certificado (.crt) y una clave privada (.key) válidos');
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from('organizaciones')
+    .update({
+      cuit,
+      punto_venta: puntoVenta,
+      afip_cert: cert,
+      afip_key: key
+    })
+    .eq('id', orgActualId);
+
+  if (error) {
+    console.error('Error guardando ARCA:', error);
+    showToast('❌ Error al guardar configuración ARCA');
+    return;
+  }
+
+  showToast('✅ Credenciales ARCA guardadas');
+  await cargarConfiguracionArca();
+}
+
+window.leerArchivoTextoArca = leerArchivoTextoArca;
+window.guardarConfiguracionArca = guardarConfiguracionArca;

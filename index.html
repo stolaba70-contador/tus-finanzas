@@ -216,6 +216,7 @@
         <label class="form-label">Tipo</label>
         <div class="select-wrapper">
           <select class="form-select" id="mov-tipo" onchange="onTipoChange()">
+            
             <option value="ingreso">Ingreso</option>
             <option value="egreso">Egreso</option>
           </select>
@@ -310,6 +311,39 @@
     <div class="form-group" style="margin-bottom:14px;">
       <label class="form-label">Detalle (opcional)</label>
       <input type="text" class="form-input" id="mov-detalle" placeholder="Descripción breve...">
+    </div>
+
+<!-- Opción de Facturación ARCA (solo visible en ingresos) -->
+    <div id="bloque-facturar-arca" class="modulo-negocio" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">
+      <label style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;">🧾</span>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--dark);">Facturar en ARCA (Factura C)</div>
+            <div style="font-size:11px;color:var(--muted);">Obtiene CAE automático al guardar</div>
+          </div>
+        </div>
+        <input type="checkbox" id="mov-facturar-arca" onchange="toggleDatosClienteArca()" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+      </label>
+
+      <div id="datos-cliente-arca" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);">
+        <div class="form-row" style="margin-bottom:0;">
+          <div class="form-group">
+            <label class="form-label">Condición receptor</label>
+            <div class="select-wrapper">
+              <select class="form-select" id="arca-doc-tipo" onchange="onDocTipoArcaChange()">
+                <option value="99">Consumidor Final (Sin DNI)</option>
+                <option value="96">DNI</option>
+                <option value="80">CUIT</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" id="grupo-arca-doc-nro" style="display:none;">
+            <label class="form-label">N° de DNI / CUIT</label>
+            <input type="number" class="form-input" id="arca-doc-nro" placeholder="Solo números">
+          </div>
+        </div>
+      </div>
     </div>
 
     <button class="btn-primary" onclick="agregarMovimiento()">Guardar movimiento</button>
@@ -646,6 +680,39 @@
       <input type="text" id="nuevo-medio-pago" class="form-input" placeholder="Nuevo medio...">
       <button onclick="agregarItemConfig('medio')" style="padding:0 14px;background:var(--accent);color:white;border:none;border-radius:9px;font-weight:600;">+</button>
     </div>
+  </div>
+
+  <div class="card" id="seccion-arca-config">
+    <div class="card-title">🏛️ Vinculación Fiscal ARCA (Producción)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.4;">
+      Cargá tu CUIT, el Punto de Venta Web Service y tus archivos <b>.crt</b> y <b>.key</b> para emitir Factura C con validez legal.
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">CUIT (sin guiones)</label>
+        <input type="number" id="arca-config-cuit" class="form-input" placeholder="Ej: 20399887209">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Punto de Venta WS</label>
+        <input type="number" id="arca-config-ptovta" class="form-input" placeholder="Ej: 3" min="1" value="3">
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:10px;">
+      <label class="form-label">Certificado ARCA (.crt)</label>
+      <input type="file" accept=".crt,.pem" class="form-input" onchange="leerArchivoTextoArca(event, 'arca-config-cert')" style="padding:7px;font-size:12px;margin-bottom:4px;">
+      <textarea id="arca-config-cert" class="form-input" rows="2" placeholder="-----BEGIN CERTIFICATE-----..." style="font-family:monospace;font-size:10px;"></textarea>
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px;">
+      <label class="form-label">Clave Privada (.key)</label>
+      <input type="file" accept=".key,.pem" class="form-input" onchange="leerArchivoTextoArca(event, 'arca-config-key')" style="padding:7px;font-size:12px;margin-bottom:4px;">
+      <textarea id="arca-config-key" class="form-input" rows="2" placeholder="-----BEGIN PRIVATE KEY-----..." style="font-family:monospace;font-size:10px;"></textarea>
+    </div>
+
+    <div id="arca-estado-vinculacion" style="font-size:12px;font-weight:600;margin-bottom:10px;"></div>
+    <button type="button" class="btn-primary" onclick="guardarConfiguracionArca()">💾 Guardar credenciales ARCA</button>
   </div>
 
 <div class="card modulo-negocio" id="seccion-empleados-config">
