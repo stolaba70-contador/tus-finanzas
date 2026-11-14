@@ -1841,7 +1841,7 @@ function renderProductos() {
 
   // Filtrar productos
   const filtrados = productos.filter(p => {
-    if (q && !p.nombre.toLowerCase().includes(q) && !(p.categoria || '').toLowerCase().includes(q)) return false;
+    if (q && !p.nombre.toLowerCase().includes(q) && !(p.categoria || '').toLowerCase().includes(q) && !(p.codigo_barras || '').toLowerCase().includes(q)) return false;
     if (fCategoria === '__sin__' && p.categoria) return false;
     if (fCategoria && fCategoria !== '__sin__' && p.categoria !== fCategoria) return false;
     if (p.precio_venta < pMin || p.precio_venta > pMax) return false;
@@ -1902,7 +1902,9 @@ function renderProductoCard(p) {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${p.nombre}</div>
-          <div style="font-size:11px;color:var(--muted);">${p.unidad || 'unidad'}</div>
+          <div style="font-size:11px;color:var(--muted);">
+            ${p.unidad || 'unidad'} ${p.codigo_barras ? `· <span style="font-family:monospace;background:var(--surface);padding:1px 5px;border-radius:4px;border:1px solid var(--border);">🏷️ ${p.codigo_barras}</span>` : ''}
+          </div>
         </div>
         <div style="text-align:right;">
           <div style="font-size:12px;font-weight:700;color:${color};">${badge} ${p.stock_actual}</div>
@@ -1945,6 +1947,8 @@ function abrirModalProducto() {
   productoEditandoId = null;
   document.getElementById('modal-producto-titulo').textContent = 'Nuevo producto';
   document.getElementById('prod-nombre').value = '';
+  document.getElementById('prod-codigo').value = '';
+  dibujarCodigoBarras('');
   document.getElementById('prod-categoria').value = '';
   document.getElementById('prod-unidad').value = 'unidad';
   document.getElementById('prod-costo').value = '';
@@ -1968,6 +1972,8 @@ function editarProducto(id) {
   productoEditandoId = id;
   document.getElementById('modal-producto-titulo').textContent = 'Editar producto';
   document.getElementById('prod-nombre').value = p.nombre;
+  document.getElementById('prod-codigo').value = p.codigo_barras || '';
+  dibujarCodigoBarras(p.codigo_barras || '');
   document.getElementById('prod-categoria').value = p.categoria || '';
   document.getElementById('prod-unidad').value = p.unidad || 'unidad';
   document.getElementById('prod-costo').value = p.precio_costo;
@@ -1983,7 +1989,22 @@ function editarProducto(id) {
 
 async function guardarProducto() {
   const nombre = document.getElementById('prod-nombre').value.trim();
+  const codigoBarras = document.getElementById('prod-codigo')?.value.trim() || null;
   if (!nombre) { showToast('⚠️ El nombre es obligatorio'); return; }
+
+  // Verificar que el código de barras no esté repetido en otro producto del mismo local
+  if (codigoBarras) {
+    const localId = document.getElementById('prod-local')?.value || null;
+    const duplicado = productos.find(p => 
+      p.codigo_barras === codigoBarras && 
+      p.id !== productoEditandoId && 
+      (!localId || p.local_id === localId)
+    );
+    if (duplicado) {
+      showToast(`⚠️ Ese código ya pertenece a "${duplicado.nombre}"`);
+      return;
+    }
+  }
 
   const { data: perfil } = await supabaseClient
     .from('perfiles')
@@ -1993,6 +2014,7 @@ async function guardarProducto() {
 
   const datos = {
     nombre,
+    codigo_barras: codigoBarras,
     categoria: document.getElementById('prod-categoria').value.trim(),
     unidad: document.getElementById('prod-unidad').value.trim() || 'unidad',
     precio_costo: parseFloat(document.getElementById('prod-costo').value) || 0,
@@ -2014,7 +2036,6 @@ async function guardarProducto() {
   cerrarModalProducto();
   await cargarProductos();
 }
-
 async function eliminarProducto(id) {
   if (!confirm('¿Eliminár este producto?')) return;
   await supabaseClient.from('productos').update({ activo: false }).eq('id', id);
@@ -2060,7 +2081,7 @@ function filtrarProductos() {
   const lista = document.getElementById('lista-busqueda-productos');
   
   const filtrados = productos.filter(p => {
-    if (q && !p.nombre.toLowerCase().includes(q) && !(p.categoria || '').toLowerCase().includes(q)) return false;
+    if (q && !p.nombre.toLowerCase().includes(q) && !(p.categoria || '').toLowerCase().includes(q) && !(p.codigo_barras || '').toLowerCase().includes(q)) return false;
     if (featuresActuales.locales && localSeleccionadoId && p.local_id !== localSeleccionadoId) return false;
     return true;
   });
@@ -2074,7 +2095,7 @@ function filtrarProductos() {
         onmouseover="this.style.background='var(--surface2)'" 
         onmouseout="this.style.background='transparent'">
         <div style="font-size:13px;font-weight:600;">${p.nombre}</div>
-        <div style="font-size:11px;color:var(--muted);">Stock: ${p.stock_actual} · $${Number(p.precio_venta).toLocaleString('es-AR')}</div>
+        <div style="font-size:11px;color:var(--muted);">Stock: ${p.stock_actual} · $${Number(p.precio_venta).toLocaleString('es-AR')} ${p.codigo_barras ? `· 🏷️ ${p.codigo_barras}` : ''}</div>
       </div>
     `).join('');
   }
@@ -2652,3 +2673,233 @@ function cargarInterfaz(perfil) {
     menuPersonal.forEach(el => el.classList.remove('hidden'));
   }
 }
+
+// ══ CÓDIGOS DE BARRAS Y ESCÁNER ══
+
+let html5QrCodeScanner = null;
+let modoEscanerActual = null; // 'producto' o 'venta'
+
+function generarCodigoInterno() {
+  // Genera un código numérico interno de 12 dígitos que empieza con 20 (prefijo estándar para uso interno)
+  let codigo = '';
+  do {
+    const random = Math.floor(1000000000 + Math.random() * 9000000000);
+    codigo = '20' + String(random);
+  } while (productos.some(p => p.codigo_barras === codigo));
+
+  const input = document.getElementById('prod-codigo');
+  if (input) {
+    input.value = codigo;
+    dibujarCodigoBarras(codigo);
+    showToast('🎲 Código único generado');
+  }
+}
+
+function dibujarCodigoBarras(valor) {
+  const contenedor = document.getElementById('contenedor-barcode-preview');
+  const svg = document.getElementById('barcode-svg');
+  if (!contenedor || !svg) return;
+
+  const codigo = String(valor || '').trim();
+  if (!codigo) {
+    contenedor.style.display = 'none';
+    return;
+  }
+
+  try {
+    if (typeof JsBarcode !== 'undefined') {
+      JsBarcode('#barcode-svg', codigo, {
+        format: 'CODE128',
+        lineColor: '#000',
+        width: 2,
+        height: 50,
+        displayValue: true,
+        fontSize: 14,
+        margin: 6
+      });
+      contenedor.style.display = 'block';
+    }
+  } catch (e) {
+    contenedor.style.display = 'none';
+  }
+}
+
+function imprimirEtiquetaProducto() {
+  const nombre = document.getElementById('prod-nombre').value.trim() || 'Producto';
+  const codigo = document.getElementById('prod-codigo').value.trim();
+  const precio = document.getElementById('prod-venta').value;
+  const svgEl = document.getElementById('barcode-svg');
+
+  if (!codigo || !svgEl) {
+    showToast('⚠️ Primero generá o ingresá un código');
+    return;
+  }
+
+  const cantidadStr = prompt('¿Cuántas etiquetas querés imprimir?', '1');
+  if (!cantidadStr) return;
+  const cantidad = Math.max(1, Math.min(200, parseInt(cantidadStr) || 1));
+
+  const svgHtml = svgEl.outerHTML;
+  const precioTexto = precio ? '$' + Number(precio).toLocaleString('es-AR') : '';
+
+  let etiquetasHtml = '';
+  for (let i = 0; i < cantidad; i++) {
+    etiquetasHtml += `
+      <div class="etiqueta">
+        <div class="nombre">${nombre}</div>
+        ${precioTexto ? `<div class="precio">${precioTexto}</div>` : ''}
+        <div class="barcode">${svgHtml}</div>
+      </div>
+    `;
+  }
+
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Etiquetas - ${nombre}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', Arial, sans-serif; padding: 10px; background: #fff; }
+        .grilla { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+        .etiqueta {
+          border: 1px dashed #9ca3af;
+          border-radius: 6px;
+          padding: 8px 10px;
+          text-align: center;
+          width: 200px;
+          page-break-inside: avoid;
+        }
+        .nombre { font-size: 12px; font-weight: 700; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .precio { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
+        .barcode svg { max-width: 100%; height: 48px; }
+        @media print {
+          body { padding: 0; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="grilla">${etiquetasHtml}</div>
+    </body>
+    </html>
+  `);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+}
+
+// Procesa un código escaneado en la pantalla de Ventas (modo supermercado)
+function procesarCodigoEnVenta(codigoLimpio) {
+  if (!codigoLimpio) return false;
+
+  const prod = productos.find(p => 
+    p.codigo_barras && p.codigo_barras.toLowerCase() === codigoLimpio.toLowerCase() &&
+    (!featuresActuales.locales || !localSeleccionadoId || p.local_id === localSeleccionadoId)
+  );
+
+  if (!prod) {
+    showToast(`❌ Código ${codigoLimpio} no registrado`);
+    return false;
+  }
+
+  // Verificar si el producto ya está en el carrito actual para sumarle +1 unidad directamente
+  const itemExistente = itemsVenta.find(it => it.productoId === prod.id && it.precio === Number(prod.precio_venta));
+  if (itemExistente) {
+    itemExistente.cantidad += 1;
+    itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio;
+  } else {
+    const cat = catIngresos.includes(prod.categoria) ? prod.categoria : (catIngresos[0] || 'Ventas');
+    itemsVenta.push({
+      productoId: prod.id,
+      nombre: prod.nombre,
+      cantidad: 1,
+      precio: Number(prod.precio_venta),
+      subtotal: Number(prod.precio_venta),
+      categoria: cat,
+      localId: localSeleccionadoId || null
+    });
+  }
+
+  renderItemsVenta();
+  document.getElementById('mov-producto-busqueda').value = '';
+  document.getElementById('lista-busqueda-productos').style.display = 'none';
+  showToast(`🛒 +1 ${prod.nombre}`);
+  return true;
+}
+
+// Detecta cuando la pistolita láser termina de escribir el código y presiona Enter
+function verificarEnterEscaneoVenta(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const input = document.getElementById('mov-producto-busqueda');
+    const valor = input.value.trim();
+    if (!valor) return;
+
+    procesarCodigoEnVenta(valor);
+  }
+}
+
+async function abrirEscanerCamara(modo) {
+  modoEscanerActual = modo;
+  const modal = document.getElementById('modal-escaner');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  if (typeof Html5Qrcode === 'undefined') {
+    showToast('❌ Librería de cámara no cargada');
+    cerrarEscanerCamara();
+    return;
+  }
+
+  try {
+    html5QrCodeScanner = new Html5Qrcode('reader-camara');
+    await html5QrCodeScanner.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 250, height: 120 } },
+      (decodedText) => {
+        // Al detectar un código válido
+        const codigo = decodedText.trim();
+        cerrarEscanerCamara();
+
+        if (modoEscanerActual === 'producto') {
+          const input = document.getElementById('prod-codigo');
+          if (input) {
+            input.value = codigo;
+            dibujarCodigoBarras(codigo);
+            showToast('✅ Código capturado: ' + codigo);
+          }
+        } else if (modoEscanerActual === 'venta') {
+          procesarCodigoEnVenta(codigo);
+        }
+      },
+      () => {
+        // Ignorar errores de cuadros vacíos mientras enfoca
+      }
+    );
+  } catch (err) {
+    console.error('Error al iniciar cámara:', err);
+    showToast('⚠️ No se pudo acceder a la cámara (verificá permisos o HTTPS)');
+    cerrarEscanerCamara();
+  }
+}
+
+async function cerrarEscanerCamara() {
+  const modal = document.getElementById('modal-escaner');
+  if (modal) modal.style.display = 'none';
+
+  if (html5QrCodeScanner) {
+    try {
+      await html5QrCodeScanner.stop();
+      html5QrCodeScanner.clear();
+    } catch (e) {}
+    html5QrCodeScanner = null;
+  }
+}
+
+window.generarCodigoInterno = generarCodigoInterno;
+window.dibujarCodigoBarras = dibujarCodigoBarras;
+window.imprimirEtiquetaProducto = imprimirEtiquetaProducto;
+window.verificarEnterEscaneoVenta = verificarEnterEscaneoVenta;
+window.abrirEscanerCamara = abrirEscanerCamara;
+window.cerrarEscanerCamara = cerrarEscanerCamara;

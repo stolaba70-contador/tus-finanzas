@@ -251,12 +251,16 @@
   <!-- Formulario para agregar un item -->
   <div style="background:var(--surface2);border:1.5px dashed var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
     <div style="position:relative;margin-bottom:10px;">
-      <input type="text" class="form-input" id="mov-producto-busqueda" 
-        placeholder="🔍 Buscar producto..." 
-        autocomplete="off"
-        oninput="filtrarProductos()" 
-        onfocus="filtrarProductos()"
-        onblur="setTimeout(() => document.getElementById('lista-busqueda-productos').style.display='none', 300)">
+      <div style="display:flex;gap:6px;">
+        <input type="text" class="form-input" id="mov-producto-busqueda" 
+          placeholder="🔍 Buscar o escanear código..." 
+          autocomplete="off"
+          oninput="filtrarProductos()" 
+          onfocus="filtrarProductos()"
+          onkeydown="verificarEnterEscaneoVenta(event)"
+          onblur="setTimeout(() => document.getElementById('lista-busqueda-productos').style.display='none', 300)">
+        <button type="button" onclick="abrirEscanerCamara('venta')" title="Escanear con cámara" style="padding:0 14px;background:var(--accent);color:white;border:none;border-radius:9px;font-size:16px;cursor:pointer;flex-shrink:0;">📷</button>
+      </div>
       <input type="hidden" id="mov-producto">
       <div id="lista-busqueda-productos" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:200px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
     </div>
@@ -806,6 +810,21 @@
         <input type="text" class="form-input" id="prod-nombre" placeholder="Ej: Remera talle M">
       </div>
 
+      <div class="form-group" style="margin-bottom:12px;">
+        <label class="form-label">Código de barras</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" class="form-input" id="prod-codigo" placeholder="Escaneá o generá un código..." oninput="dibujarCodigoBarras(this.value)">
+          <button type="button" onclick="abrirEscanerCamara('producto')" title="Escanear con cámara" style="padding:0 12px;background:var(--accent-light);color:var(--accent);border:none;border-radius:9px;font-size:16px;cursor:pointer;">📷</button>
+          <button type="button" onclick="generarCodigoInterno()" title="Generar código automático" style="padding:0 12px;background:var(--surface2);color:var(--dark);border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">🎲 Generar</button>
+        </div>
+        <div id="contenedor-barcode-preview" style="display:none;text-align:center;margin-top:10px;padding:12px;background:#fff;border-radius:10px;border:1px solid var(--border);">
+          <svg id="barcode-svg" style="max-width:100%;height:auto;"></svg>
+          <div style="margin-top:8px;">
+            <button type="button" onclick="imprimirEtiquetaProducto()" style="padding:6px 14px;background:var(--dark);color:white;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">🖨️ Imprimir etiquetas / Ticket</button>
+          </div>
+        </div>
+      </div>
+
       <div class="form-row">
         <div class="form-group">
   <label class="form-label">Categoría</label>
@@ -906,6 +925,16 @@
   </div>
 </div>
 
+<!-- Modal Escáner de Cámara -->
+<div id="modal-escaner" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--surface);border-radius:18px;padding:20px;width:100%;max-width:400px;text-align:center;">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;margin-bottom:12px;">📷 Escanear código de barras</div>
+    <div id="reader-camara" style="width:100%;border-radius:12px;overflow:hidden;margin-bottom:14px;background:#000;"></div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Apuntá la cámara al código de barras del producto</div>
+    <button type="button" onclick="cerrarEscanerCamara()" style="width:100%;padding:12px;background:var(--red-light);color:var(--red);border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancelar</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <div class="bottom-nav">
@@ -936,6 +965,13 @@
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script type="module" src="script.js"></script>
 
 <script type="module" src="script.js"></script>
 </body>
