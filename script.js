@@ -1733,6 +1733,8 @@ window.cerrarModalEmpleado = cerrarModalEmpleado;
 window.guardarEmpleado = guardarEmpleado;
 window.editarEmpleado = editarEmpleado;
 window.desactivarEmpleado = desactivarEmpleado;
+window.cambiarCantidadItemVenta = cambiarCantidadItemVenta;
+window.cambiarPrecioItemVenta = cambiarPrecioItemVenta;
 
 function toggleTema() {
   const esOscuro = document.body.classList.toggle('tema-oscuro');
@@ -2155,20 +2157,62 @@ function renderItemsVenta() {
   }
 
   lista.innerHTML = itemsVenta.map((it, idx) => `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:600;">${it.nombre}</div>
-        <div style="font-size:11px;color:var(--muted);">${it.cantidad} × $${Number(it.precio).toLocaleString('es-AR')} · ${it.categoria}</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;">${it.nombre}</div>
+          <div style="font-size:11px;color:var(--muted);">${it.categoria}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-weight:800;font-size:14px;color:var(--green);">$${Number(it.subtotal).toLocaleString('es-AR')}</div>
+          <button type="button" onclick="quitarItemVenta(${idx})" style="background:var(--red-light);color:var(--red);border:none;border-radius:6px;width:24px;height:24px;cursor:pointer;font-size:12px;font-weight:700;">✕</button>
+        </div>
       </div>
-      <div style="text-align:right;display:flex;align-items:center;gap:8px;">
-        <div style="font-weight:700;font-size:13px;color:var(--green);">$${Number(it.subtotal).toLocaleString('es-AR')}</div>
-        <button type="button" onclick="quitarItemVenta(${idx})" style="background:var(--red-light);color:var(--red);border:none;border-radius:5px;width:24px;height:24px;cursor:pointer;font-size:12px;">✕</button>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:8px;border-top:1px dashed var(--border);">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;color:var(--muted);margin-right:2px;">Cant:</span>
+          <button type="button" onclick="cambiarCantidadItemVenta(${idx}, ${it.cantidad - 1})" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--dark);font-weight:700;cursor:pointer;">−</button>
+          <input type="number" value="${it.cantidad}" min="1" step="any" 
+            onchange="cambiarCantidadItemVenta(${idx}, this.value)"
+            style="width:48px;height:26px;text-align:center;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--dark);font-size:12px;font-weight:700;font-family:'Inter',sans-serif;">
+          <button type="button" onclick="cambiarCantidadItemVenta(${idx}, ${it.cantidad + 1})" style="width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--dark);font-weight:700;cursor:pointer;">+</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:11px;color:var(--muted);">Precio u.: $</span>
+          <input type="number" value="${it.precio}" min="0" step="0.01"
+            onchange="cambiarPrecioItemVenta(${idx}, this.value)"
+            style="width:76px;height:26px;padding:0 6px;text-align:right;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--dark);font-size:12px;font-weight:600;font-family:'Inter',sans-serif;">
+        </div>
       </div>
     </div>
   `).join('');
 
   const total = itemsVenta.reduce((s, it) => s + it.subtotal, 0);
   document.getElementById('mov-total-display').textContent = '$' + total.toLocaleString('es-AR');
+}
+
+function cambiarCantidadItemVenta(idx, nuevaCant) {
+  const cant = parseFloat(nuevaCant);
+  if (isNaN(cant) || cant <= 0) {
+    quitarItemVenta(idx);
+    return;
+  }
+  itemsVenta[idx].cantidad = cant;
+  itemsVenta[idx].subtotal = cant * itemsVenta[idx].precio;
+  renderItemsVenta();
+}
+
+function cambiarPrecioItemVenta(idx, nuevoPrecio) {
+  const precio = parseFloat(nuevoPrecio);
+  if (isNaN(precio) || precio < 0) {
+    renderItemsVenta();
+    return;
+  }
+  itemsVenta[idx].precio = precio;
+  itemsVenta[idx].subtotal = itemsVenta[idx].cantidad * precio;
+  renderItemsVenta();
 }
 
 function quitarItemVenta(idx) {
@@ -2803,19 +2847,23 @@ function procesarCodigoEnVenta(codigoLimpio) {
     return false;
   }
 
-  // Verificar si el producto ya está en el carrito actual para sumarle +1 unidad directamente
-  const itemExistente = itemsVenta.find(it => it.productoId === prod.id && it.precio === Number(prod.precio_venta));
+  // Tomar la cantidad que esté escrita en el input (por defecto 1)
+  const inputCant = document.getElementById('mov-cantidad');
+  const cantAgregar = Math.max(1, parseFloat(inputCant?.value) || 1);
+
+  // Verificar si el producto ya está en el carrito para sumarle la cantidad
+  const itemExistente = itemsVenta.find(it => it.productoId === prod.id);
   if (itemExistente) {
-    itemExistente.cantidad += 1;
+    itemExistente.cantidad += cantAgregar;
     itemExistente.subtotal = itemExistente.cantidad * itemExistente.precio;
   } else {
     const cat = catIngresos.includes(prod.categoria) ? prod.categoria : (catIngresos[0] || 'Ventas');
     itemsVenta.push({
       productoId: prod.id,
       nombre: prod.nombre,
-      cantidad: 1,
+      cantidad: cantAgregar,
       precio: Number(prod.precio_venta),
-      subtotal: Number(prod.precio_venta),
+      subtotal: cantAgregar * Number(prod.precio_venta),
       categoria: cat,
       localId: localSeleccionadoId || null
     });
@@ -2823,8 +2871,9 @@ function procesarCodigoEnVenta(codigoLimpio) {
 
   renderItemsVenta();
   document.getElementById('mov-producto-busqueda').value = '';
+  if (inputCant) inputCant.value = '1'; // Resetear a 1 para el próximo escaneo
   document.getElementById('lista-busqueda-productos').style.display = 'none';
-  showToast(`🛒 +1 ${prod.nombre}`);
+  showToast(`🛒 +${cantAgregar} ${prod.nombre}`);
   return true;
 }
 
